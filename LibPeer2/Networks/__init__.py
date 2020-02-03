@@ -1,5 +1,3 @@
-from LibPeer2.Networks.PeerInfo import PeerInfo
-from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 import rx
 
 class Network:
@@ -16,8 +14,8 @@ class Network:
     def bring_down(self):
         raise NotImplementedError
 
-    def advertise(self, InstanceReference: InstanceReference):
+    def advertise(self):
         raise NotImplementedError
 
-    def send(self, buffer, peer_info: PeerInfo):
+    def send(self, buffer, peer_info):
         raise NotImplementedError

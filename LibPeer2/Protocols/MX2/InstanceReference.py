@@ -2,6 +2,8 @@ from nacl import signing
 from nacl import public
 from io import BytesIO
 
+import base64
+
 class InstanceReference:
 
     SERIALISED_SIZE = 64
@@ -35,10 +37,13 @@ class InstanceReference:
         public_key = public.PublicKey(bytes_pkey)
 
         # Return a new instance
-        return Instance(verification_key, public_key)
+        return InstanceReference(verification_key, public_key)
 
     def __hash__(self):
-        hash((self.verification_key.encode(), self.public_key.encode()))
+        return hash((self.verification_key.encode(), self.public_key.encode()))
 
     def __eq__(self, other):
         return self.verification_key.encode() == other.verification_key.encode() and self.public_key.encode() == other.public_key.encode()
+
+    def __repr__(self):
+        return "<InstanceReference: \"{}\">".format(base64.b64encode(self.serialise().read()).decode("utf-8"))

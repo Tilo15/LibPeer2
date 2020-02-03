@@ -2,6 +2,7 @@ from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 from LibPeer2.Protocols.MX2.Instance import Instance
 from nacl.public import SealedBox
 from nacl.public import PrivateKey
+from nacl.signing import SigningKey
 from io import BytesIO
 from typing import Dict
 
@@ -15,7 +16,7 @@ class Frame:
         self.origin = origin
         self.payload = payload
 
-    def serialise(self, signing_key: signing.SigningKey):
+    def serialise(self, signing_key: SigningKey):
         # Create buffer
         buffer = BytesIO()
 
@@ -59,6 +60,8 @@ class Frame:
 
         # Do we have an instance matching the destination of this packet?
         if(destination not in instances):
+            print(destination)
+            print(instances)
             # Raise an error
             raise IOError("Received frame does not belong to any current instances")
 

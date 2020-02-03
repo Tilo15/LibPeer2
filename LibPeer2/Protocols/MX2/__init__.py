@@ -1,7 +1,9 @@
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 from LibPeer2.Protocols.MX2.Instance import Instance
 from LibPeer2.Protocols.MX2.Frame import Frame
+from LibPeer2.Protocols.MX2.Packet import Packet
 from LibPeer2.Networks.Receiption import Receiption
+from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Networks import Network
 
 from io import BytesIO
@@ -36,6 +38,7 @@ class MX2:
 
         # Add the network to the set
         network_set.add(network)
+        network.incoming_receiption.subscribe(self.__handle_receiption)
 
     """Create a new instance for use by an application"""
     def create_instance(self, application_namespace):
@@ -60,10 +63,14 @@ class MX2:
             # Loop over the networks that match the type
             for network in self.__networks[peer.NETWORK_TYPE]:
                 # Create a frame containing an inquire packet
-                frame = Frame(destination, instance, BytesIO(MX2.PACKET_INQUIRE + instance.application_namespace.encode("utf-8")))
+                frame = Frame(destination, instance.reference, BytesIO(MX2.PACKET_INQUIRE + instance.application_namespace.encode("utf-8")))
 
                 # Send using the network and peer info
-                network.send(frame.serialise(), peer)
+                network.send(frame.serialise(instance.signing_key), peer)
+
+    def send(self, instance: Instance, destination: InstanceReference, data):
+        # Send payload
+        self.__send_packet(instance, destination, BytesIO(MX2.PACKET_PAYLOAD + data))
 
     
     def __send_packet(self, instance: Instance, destination: InstanceReference, payload):
@@ -79,7 +86,7 @@ class MX2:
         network, peer_info = self.__remote_instance_mapping[destination]
 
         # Send frame over network
-        network.send(frame.serialise(), peer_info)
+        network.send(frame.serialise(instance.signing_key), peer_info)
 
 
     def __handle_receiption(self, receiption: Receiption):
@@ -105,19 +112,19 @@ class MX2:
         elif(packet_type == MX2.PACKET_GREET):
             # We received a greeting!
             # Have we received one from this instance before?
-            if(frame.destination not in self.__remote_instance_mapping):
+            if(frame.origin not in self.__remote_instance_mapping):
                 # No, this is the first (therefore, least latent) method of talking to this instance
-                self.__remote_instance_mapping[frame.destination] = (receiption.network, receiption.peer_info)
+                self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info)
 
             # Does the instance know that this is now a reachable peer?
-            if(frame.destination not in instance.reachable_peers):
+            if(frame.origin not in instance.reachable_peers):
                 # No, notify it
-                instance.reachable_peers.add(frame.destination)
-                instance.incoming_greeting.on_next(frame.destination)
+                instance.reachable_peers.add(frame.origin)
+                instance.incoming_greeting.on_next(frame.origin)
 
         elif(packet_type == MX2.PACKET_PAYLOAD):
             # This is a payload for the next layer to handle, pass it up.
-            instance.incoming_payload.on_next(frame)
+            instance.incoming_payload.on_next(Packet(frame))
                 
 
 
