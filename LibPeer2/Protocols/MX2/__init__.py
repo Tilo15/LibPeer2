@@ -7,11 +7,13 @@ from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Networks import Network
 
 from io import BytesIO
+from cachetools import TTLCache
 from typing import Dict
 from typing import Tuple
 from typing import List
 
 import uuid
+import time
 
 """MuXer 2"""
 class MX2:
@@ -24,6 +26,8 @@ class MX2:
         self.__networks: Dict[bytes, Network] = {}
         self.__instances: Dict[InstanceReference, Instance] = {}
         self.__remote_instance_mapping: Dict[InstanceReference, Tuple[Network, PeerInfo]] = {}
+        self.__inquire_timer = TTLCache(512, 120)
+        self.__pings: Dict[InstanceReference, float] = {}
 
 
     """Register a network on the MX2 instance, allowing it to use the network to find and talk to instances"""
@@ -53,6 +57,9 @@ class MX2:
 
     """Given a destination instance. Send inquire packets as instance to every PeerInfo peer in the peers list"""
     def inquire(self, instance: Instance, destination: InstanceReference, peers: List[PeerInfo]):
+        # Start timing this
+        self.__inquire_timer[destination] = time.time()
+
         # Loop over each peer to try
         for peer in peers:
             # Do we have the network associated with the peer info?
@@ -68,11 +75,20 @@ class MX2:
                 # Send using the network and peer info
                 network.send(frame.serialise(instance.signing_key), peer)
 
+    """Send data to the specified destination"""
     def send(self, instance: Instance, destination: InstanceReference, data):
         # Send payload
         self.__send_packet(instance, destination, BytesIO(MX2.PACKET_PAYLOAD + data))
 
-    
+    """Get a suggested timeout time in seconds for replies from this peer"""
+    def suggested_timeout(self, target: InstanceReference):
+        # Do we have a ping for the peer?
+        if(target in self.__pings):
+            return self.__pings[target] * 2.0
+
+        return 120.0
+
+
     def __send_packet(self, instance: Instance, destination: InstanceReference, payload):
         # Do we know how to reach the destination instance?
         if(destination not in self.__remote_instance_mapping):
@@ -115,6 +131,14 @@ class MX2:
             if(frame.origin not in self.__remote_instance_mapping):
                 # No, this is the first (therefore, least latent) method of talking to this instance
                 self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info)
+
+                # Get ping
+                ping = 120.0
+                if(origin in self.__inquire_timer):
+                    ping = self.__inquire_timer[origin]
+
+                # Save ping
+                self.__pings[origin] = ping
 
             # Does the instance know that this is now a reachable peer?
             if(frame.origin not in instance.reachable_peers):
