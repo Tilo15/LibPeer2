@@ -5,6 +5,7 @@ from LibPeer2.Protocols.STP.Stream.Segments import Segment
 from LibPeer2.Protocols.STP.Stream.Segments.Payload import Payload
 from LibPeer2.Protocols.STP.Stream.Segments.Acknowledgement import Acknowledgement
 from LibPeer2.Protocols.STP.Stream.Segments.Control import Control
+from LibPeer2.Protocols.STP.Stream.SegmentTracker import SegmentTracker
 
 from threading import Lock
 from io import BytesIO
