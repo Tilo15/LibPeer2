@@ -2,8 +2,9 @@ from io import BytesIO
 
 class EgressStream:
 
-    def __init__(self, data_subject):
-        self.__data_subject = data_subject
+    def __init__(self, send_callback, close_callback):
+        self.__send_callback = send_callback
+        self.__close_callback = close_callback
         self.closed = False
         
     
@@ -11,8 +12,9 @@ class EgressStream:
         if(self.closed):
             raise OSError("Stream is closed")
 
-        self.__data_subject.on_next(BytesIO(data))
+        return self.__send_callback(BytesIO(data))
 
 
     def close(self):
-        self.__data_subject.on_complete()
+        self.closed = True
+        self.__close_callback()

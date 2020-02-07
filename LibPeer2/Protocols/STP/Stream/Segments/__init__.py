@@ -6,6 +6,7 @@ class Segment:
     def serialise(self, stream):
         stream.write(self.IDENTIFIER)
         self._serialise(stream)
+         
 
     def _serialise(self, stream):
         raise NotImplementedError()

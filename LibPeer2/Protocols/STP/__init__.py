@@ -14,6 +14,4 @@ class STP:
         self.__open_streams = {}
         self.__pending_streams = TTLCache(65536, 120)
 
-        
-
     

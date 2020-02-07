@@ -39,6 +39,6 @@ class IngressStream:
 
     def close(self):
         self.closed = True
-        self.__closed_subject.on_next(None)
+        self.__closed_subject.on_complete()
 
             

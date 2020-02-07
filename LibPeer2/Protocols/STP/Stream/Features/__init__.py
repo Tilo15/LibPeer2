@@ -3,8 +3,8 @@ class Feature:
 
     IDENTIFIER = 0
 
-    def wrap(self, stream):
+    def wrap(self, data: bytes):
         raise NotImplementedError()
 
-    def unwrap(self, stream):
+    def unwrap(self, data: bytes):
         raise NotImplementedError()
