@@ -19,6 +19,7 @@ import math
 
 SEGMENT_PAYLOAD_SIZE = 10240
 METRIC_WINDOW_SIZE = 2
+MAX_WINDOW_SIZE = 65536
 
 class Session:
 
@@ -34,8 +35,10 @@ class Session:
         self.last_send = 0
 
         self.best_ping = ping
+        self.worst_ping = ping
         self.window_size = METRIC_WINDOW_SIZE
         self.adjustment_delta = 0
+        self.redundant_resends = 0
 
         self.segment_number = 0
         self.segment_lock = Lock()
@@ -79,8 +82,9 @@ class Session:
         if(isinstance(segment, Acknowledgement)):
             # Is this segment still in flight?
             if(segment.sequence_number not in self.in_flight):
-                # TODO remove
-                print("Segment {} was acknowledged but not in flight".format(segment.sequence_number))
+                # We must have resent redundantly
+                self.redundant_resends += 1
+                print("REDUNDANT RESEND #{}".format(self.redundant_resends))
                 return
 
             # We have an acknowledgement segment, remove payload segment from in-flight
@@ -102,15 +106,15 @@ class Session:
                 # Do we have a sample?
                 if(len(self.segment_trips) >= METRIC_WINDOW_SIZE):
                     # Update the ping based on the average of the metric segments
-                    self.best_ping = round(sum(self.segment_trips) / len(self.segment_trips))
+                    self.best_ping = sum(self.segment_trips) / float(len(self.segment_trips))
                     
                     # Update the window size now we have our baseline
                     self.__adjust_window_size(round_trip)
 
             else:
-                # No, adjust the window size normally
+                # No, adjust the window size
                 self.__adjust_window_size(round_trip)
-
+                
         elif(isinstance(segment, Payload)):
             # We have a payload segment, run it through the enabled features
             for i in range(len(self.features), 0, -1):
@@ -129,7 +133,7 @@ class Session:
                 else:
                     # Increment next expected sequence number
                     self.next_expected_sequence_number += 1
-                    
+
                     # Just send to the app
                     self.incoming_app_data.on_next(BytesIO(segment.data))
 
@@ -180,8 +184,15 @@ class Session:
 
             
     def __adjust_window_size(self, last_trip):
+        last_trip_metric = round(last_trip, 3)
+
+        # Is this the worst we have had?
+        if(self.worst_ping < last_trip):
+            # Update worst ping metric
+            self.worst_ping = last_trip
+
         # Has the trip time gotten longer?
-        if(last_trip > self.best_ping):
+        if(last_trip_metric > self.best_ping):
             # Yes, were we previously increasing the window size?
             if(self.adjustment_delta > 0):
                 # Yes, stop increasing it
@@ -197,8 +208,8 @@ class Session:
                 # Yes, decrease it some more
                 self.adjustment_delta *= 2
 
-        # Did the trip get shorter?
-        elif(last_trip < self.best_ping):
+        # Did the trip get shorter or stay the same?
+        elif(last_trip_metric <= self.best_ping):
             # Yes, were we previously increasing the window size?
             if(self.adjustment_delta > 0):
                 # Yes, increase it some more
@@ -226,7 +237,16 @@ class Session:
             # Clear out our trip metrics
             self.segment_trips.clear()
 
-        print("NEW WINDOW SIZE: {}".format(self.window_size))
+        # Is the window size now bigger than the max window size?
+        if(self.window_size > MAX_WINDOW_SIZE):
+            # Yes, reset it to the metric size
+            self.window_size = MAX_WINDOW_SIZE
+
+            # Update the delta too
+            self.adjustment_delta = 0
+
+        # TODO remove
+        print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
 
 
     def __enqueue_segments(self):
@@ -237,14 +257,16 @@ class Session:
             self.outgoing_segment_queue.put(segment)
 
         # Calculate a maximum time value for segments eligable to be resent
-        maxtime = time.time() - (self.best_ping * 1.5)
+        maxtime = time.time() - (self.worst_ping * math.log10(self.redundant_resends + 10) * self.window_size)
 
         # Do we have any in-flight packets to resend?
-        # for segment in list(self.in_flight.values()):
-        #     # Is the segment timing value less than the max time?
-        #     if(segment.timing != None and segment.timing < maxtime):
-        #         # Resend it
-        #         self.outgoing_segment_queue.put(segment)
+        for segment in list(self.in_flight.values()):
+            # Is the segment timing value less than the max time?
+            if(segment.sequence_number in self.in_flight and segment.timing != None and segment.timing < maxtime):
+                #print("RESEND: {}".format(self.worst_ping * (self.redundant_resends + 1) * self.window_size))
+                # Resend it
+                segment.timing = time.time()
+                self.outgoing_segment_queue.put(segment)
 
 
     def __handle_app_data(self, stream):

@@ -11,7 +11,7 @@ class ExponentialPinger:
 
     def __init__(self, conduit: Conduit):
         self.muxer = MX2()
-        self.network = conduit.get_interface(True, 0.2, 0.5)
+        self.network = conduit.get_interface(True, 0.2, 0.0, 0.5)
         self.network.bring_up()
         self.muxer.register_network(self.network)
         self.instance = self.muxer.create_instance("ExponentialPinger")

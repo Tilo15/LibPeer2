@@ -19,10 +19,10 @@ class Conduit:
             threading.Thread(name="Stat Timer", target=self.auto_print).start()
         
 
-    def get_interface(self, print_stats = False, latency = 0.1, loss_probability = 0.0):
+    def get_interface(self, print_stats = False, delay = 0.0, latency = 0.1, loss_probability = 0.0):
         self.count += 1
         identifier = uuid.uuid4().bytes
-        interface = NetSim(self, identifier, self.count, latency, loss_probability)
+        interface = NetSim(self, identifier, self.count, delay, latency, loss_probability)
         self.interfaces[identifier] = interface
         self.stats[identifier] = InterfaceStats(identifier, self.count, print_stats)
 

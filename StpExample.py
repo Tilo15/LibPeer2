@@ -13,7 +13,7 @@ class GiveFile:
 
     def __init__(self, conduit, file_path):
         self.muxer = MX2()
-        self.network = conduit.get_interface(False, 0.0, 0.0)
+        self.network = conduit.get_interface(False, 0.0, 0.001, 0.05)
         self.network.bring_up()
         self.muxer.register_network(self.network)
         self.instance = self.muxer.create_instance("GiveFile")

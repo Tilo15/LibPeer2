@@ -14,10 +14,11 @@ class NetSim(Network):
 
     NETWORK_IDENTIFIER = b"NetSim"
 
-    def __init__(self, conduit, identifier, count, latency = 0.01, loss_probability=0.0):
+    def __init__(self, conduit, identifier, count, delay = 0.001, latency=0.01, loss_probability=0.0):
         self.conduit = conduit
         self.count = count
         self.identifier = identifier
+        self.delay = delay
         self.latency = latency
         self.loss_probability = loss_probability
 
@@ -38,6 +39,10 @@ class NetSim(Network):
         self.conduit.advertise(self.identifier, advetrisement)
 
     def send(self, buffer, peer_info: NetSimPeerInfo):
+        threading.Thread(name="Packet latency timer", target=self.__send, args=(buffer, peer_info)).start()
+
+    def __send(self, buffer, peer_info: NetSimPeerInfo):
+        time.sleep(self.latency)
         self.conduit.send_packet(self.identifier, peer_info.identifier, buffer)
 
     def _receive_packet(self, origin, buffer):
@@ -48,7 +53,7 @@ class NetSim(Network):
     def __loop(self):
         while(self.up):
             receiption = self.queue.get()
-            time.sleep(self.latency)
+            time.sleep(self.delay)
 
             ran_num = random.randint(1, 100)
             lost = ran_num <= self.loss_probability * 100
