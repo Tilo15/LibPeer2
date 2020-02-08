@@ -18,7 +18,7 @@ import math
 
 
 SEGMENT_PAYLOAD_SIZE = 16384 # TODO this should probably be per session
-METRIC_WINDOW_SIZE = 2
+METRIC_WINDOW_SIZE = 4
 MAX_WINDOW_SIZE = 65536
 
 class Session:
@@ -184,7 +184,7 @@ class Session:
 
             
     def __adjust_window_size(self, last_trip):
-        last_trip_metric = round(last_trip, 3)
+        last_trip_metric = round(last_trip, 1)
 
         # Is this the worst we have had?
         if(self.worst_ping < last_trip):
@@ -246,7 +246,7 @@ class Session:
             self.adjustment_delta = 0
 
         # TODO remove
-        # print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
+        print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
 
 
     def __enqueue_segments(self):

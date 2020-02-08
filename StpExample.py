@@ -13,7 +13,7 @@ class GiveFile:
 
     def __init__(self, conduit, file_path):
         self.muxer = MX2()
-        self.network = conduit.get_interface(False, 0.0, 0.0, 0.0)
+        self.network = conduit.get_interface(False, 0.0, 0.5, 0.0)
         self.network.bring_up()
         self.muxer.register_network(self.network)
         self.instance = self.muxer.create_instance("GiveFile")
@@ -77,8 +77,8 @@ if __name__ == "__main__":
     
     conduit = Conduit()
 
-    p1 = GiveFile(conduit, "/home/bbarrow/Music/Anders Enger Jensen - The Last Goddess OST/Anders Enger Jensen - The Last Goddess OST - 01 The Last Goddess Theme.flac")
     p2 = GiveFile(conduit, "/home/bbarrow/Music/Snail Mail - Lush/Snail Mail - Lush - 08 Full Control.flac")
+    p1 = GiveFile(conduit, "/home/bbarrow/Music/Anders Enger Jensen - The Last Goddess OST/Anders Enger Jensen - The Last Goddess OST - 01 The Last Goddess Theme.flac")
 
     #p1 = GiveFile(conduit, "/home/bbarrow/Pictures/Lame Party Music.png")
     #p2 = GiveFile(conduit, "/home/bbarrow/Pictures/Lame Party Music.jpg")
