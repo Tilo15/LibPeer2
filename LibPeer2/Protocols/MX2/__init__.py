@@ -134,11 +134,11 @@ class MX2:
 
                 # Get ping
                 ping = 120.0
-                if(origin in self.__inquire_timer):
-                    ping = self.__inquire_timer[origin]
+                if(frame.origin in self.__inquire_timer):
+                    ping = self.__inquire_timer[frame.origin]
 
                 # Save ping
-                self.__pings[origin] = ping
+                self.__pings[frame.origin] = ping
 
             # Does the instance know that this is now a reachable peer?
             if(frame.origin not in instance.reachable_peers):

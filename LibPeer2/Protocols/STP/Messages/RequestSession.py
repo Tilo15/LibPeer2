@@ -14,7 +14,7 @@ class RequestSession(Messages.Message):
         self.timing = timing
 
 
-    def _build(self, stream):
+    def _build(stream):
         # Read the session ID
         session_id = stream.read(16)
 
@@ -41,7 +41,7 @@ class RequestSession(Messages.Message):
         stream.write(self.in_reply_to)
 
         # Write the feature count
-        stream.write(struct.pack("!B", len(self.feature_codes))
+        stream.write(struct.pack("!B", len(self.feature_codes)))
 
         # Write the feature codes
         stream.write(bytes(self.feature_codes))

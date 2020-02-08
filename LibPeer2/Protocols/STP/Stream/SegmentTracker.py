@@ -16,4 +16,4 @@ class SegmentTracker:
         self.notify_subject.on_next((len(self.remaining) / float(self.segment_count) - 1) * -1)
 
         if(len(self.remaining) == 0):
-            self.notify_subject.on_complete()
+            self.notify_subject.on_completed()

@@ -9,7 +9,7 @@ class BeginSession(Messages.Message):
         self.session_id = session_id
         self.reply_timing = reply_timing
 
-    def _build(self, stream):
+    def _build(stream):
         # Read the session ID
         session_id = stream.read(16)
 
@@ -17,13 +17,13 @@ class BeginSession(Messages.Message):
         reply_timing = struct.unpack("!d", stream.read(8))[0]
 
         # Return the object
-        return BeginSession(session_id, feature_codes)
+        return BeginSession(session_id, reply_timing)
 
     def _serialise(self, stream):
         # Write the session ID
         stream.write(self.session_id)
 
         # Write the reply timing
-        stream.write(struct.pack("!d", self.reply_timing)
+        stream.write(struct.pack("!d", self.reply_timing))
 
 

@@ -2,7 +2,9 @@ from io import BytesIO
 
 class EgressStream:
 
-    def __init__(self, send_callback, close_callback, reply_subject):
+    def __init__(self, identifier, target, send_callback, close_callback, reply_subject):
+        self.id = identifier
+        self.target = target
         self.__send_callback = send_callback
         self.__close_callback = close_callback
         self.closed = False

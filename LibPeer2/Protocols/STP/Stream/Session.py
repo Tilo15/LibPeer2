@@ -6,6 +6,7 @@ from LibPeer2.Protocols.STP.Stream.Segments.Payload import Payload
 from LibPeer2.Protocols.STP.Stream.Segments.Acknowledgement import Acknowledgement
 from LibPeer2.Protocols.STP.Stream.Segments.Control import Control
 from LibPeer2.Protocols.STP.Stream.SegmentTracker import SegmentTracker
+from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 
 from threading import Lock
 from io import BytesIO
@@ -21,12 +22,13 @@ METRIC_WINDOW_SIZE = 2
 
 class Session:
 
-    def __init__(self, features, identifier: bytes, ping: float, ingress = False):
+    def __init__(self, target: InstanceReference, features, identifier: bytes, ping: float, ingress = False):
         # Instansiate class members
         self.ingress = ingress
         self.features: List[Feature] = [x() for x in features]
         self.identifier = identifier
         self.open = True
+        self.target = target
 
         self.outgoing_segment_queue = queue.Queue()
         self.last_send = 0
@@ -51,10 +53,10 @@ class Session:
         if(ingress):
             close_subject = rx.subjects.Subject()
             close_subject.subscribe(None, None, self.__handle_app_close)
-            self.stream = IngressStream(self.incoming_app_data, close_subject)
+            self.stream = IngressStream(self.identifier, self.target, self.incoming_app_data, close_subject)
         else:
             self.reply_subject = rx.subjects.Subject()
-            self.stream = EgressStream(self.__handle_app_data, self.__handle_app_close, self.reply_subject)
+            self.stream = EgressStream(self.identifier, self.target, self.__handle_app_data, self.__handle_app_close, self.reply_subject)
 
 
     def has_pending_segment(self):
@@ -65,7 +67,7 @@ class Session:
         return self.outgoing_segment_queue.qsize() > 0
 
 
-    def get_pending_segment(self, stream) -> Segment:
+    def get_pending_segment(self) -> Segment:
         segment = self.outgoing_segment_queue.get_nowait()
         self.last_send = time.time()
         return segment
@@ -75,13 +77,19 @@ class Session:
         # We have received a segment from the muxer
         # Figure out the segment type
         if(isinstance(segment, Acknowledgement)):
+            # Is this segment still in flight?
+            if(segment.sequence_number not in self.in_flight):
+                # TODO remove
+                print("Segment {} was acknowledged but not in flight".format(segment.sequence_number))
+                return
+
             # We have an acknowledgement segment, remove payload segment from in-flight
             del self.in_flight[segment.sequence_number]
 
             # Do we have a tracking object for this?
             if(segment.sequence_number in self.segment_trackers):
                 # Yes, notify it (TODO maybe put this into a queue so as not to block the network rx thread)
-                self.segment_trackers[segment].complete(segment.sequence_number)
+                self.segment_trackers[segment.sequence_number].complete(segment.sequence_number)
 
             # What was the time difference?
             round_trip = time.time() - segment.timing
@@ -119,6 +127,9 @@ class Session:
                     self.incoming_app_data.on_next(self.__complete_reconstruction())
 
                 else:
+                    # Increment next expected sequence number
+                    self.next_expected_sequence_number += 1
+                    
                     # Just send to the app
                     self.incoming_app_data.on_next(BytesIO(segment.data))
 
@@ -132,7 +143,7 @@ class Session:
 
         elif(isinstance(segment, Control)):
             # We have a control segment, what is it telling us?
-            if(segment.command = Control.CMD_ABORT):
+            if(segment.command == Control.CMD_ABORT):
                 pass
             # TODO
 
@@ -215,21 +226,25 @@ class Session:
             # Clear out our trip metrics
             self.segment_trips.clear()
 
+        print("NEW WINDOW SIZE: {}".format(self.window_size))
+
 
     def __enqueue_segments(self):
         # If we have segments to queue, and room in our window, queue them
         while self.segment_queue.qsize() > 0 and len(self.in_flight) < self.window_size:
-            self.outgoing_segment_queue.put(self.segment_queue.get())
+            segment = self.segment_queue.get()
+            self.in_flight[segment.sequence_number] = segment
+            self.outgoing_segment_queue.put(segment)
 
         # Calculate a maximum time value for segments eligable to be resent
         maxtime = time.time() - (self.best_ping * 1.5)
 
         # Do we have any in-flight packets to resend?
-        for segment in self.in_flight.values():
-            # Is the segment timing value less than the max time?
-            if(segment.timing < maxtime):
-                # Resend it
-                self.outgoing_segment_queue.put(segment)
+        # for segment in list(self.in_flight.values()):
+        #     # Is the segment timing value less than the max time?
+        #     if(segment.timing != None and segment.timing < maxtime):
+        #         # Resend it
+        #         self.outgoing_segment_queue.put(segment)
 
 
     def __handle_app_data(self, stream):

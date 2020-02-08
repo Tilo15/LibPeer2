@@ -29,6 +29,6 @@ class Message:
     def deserialise(stream):
         # Get the type
         type_byte = stream.read(1)
-        subclass = next(x for x in Segment.__subclasses__() if x.MESSAGE_TYPE == type_byte)
+        subclass = next(x for x in Message.__subclasses__() if x.MESSAGE_TYPE == type_byte)
 
         return subclass._build(stream)

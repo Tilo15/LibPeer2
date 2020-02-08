@@ -10,7 +10,7 @@ class SegmentMessage(Messages.Message):
         self.session_id = session_id
         self.segment = segment
 
-    def _build(self, stream):
+    def _build(stream):
         # Read the session ID
         session_id = stream.read(16)
 

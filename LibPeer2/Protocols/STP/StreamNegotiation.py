@@ -10,7 +10,7 @@ class StreamNegotiation:
     STATE_ACCEPTED = 2
 
     def __init__(self, identifer: bytes, in_reply_to: bytes, feature_codes: List[int], state, instance_reference: InstanceReference, ingress):
-        self.identifer = identifer
+        self.session_id = identifer
         self.in_reply_to = in_reply_to
         self.feature_codes = feature_codes
         self.state = state

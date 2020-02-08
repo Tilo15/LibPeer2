@@ -8,6 +8,7 @@ import threading
 import queue
 import time
 import random
+import traceback
 
 class NetSim(Network):
 
@@ -56,6 +57,7 @@ class NetSim(Network):
                 try:
                     self.incoming_receiption.on_next(receiption)
                 except Exception as e:
+                    print(traceback.format_exc())
                     print("Exception on incoming packet: {}".format(e))
 
             else:
