@@ -8,3 +8,8 @@ class Feature:
 
     def unwrap(self, data: bytes):
         raise NotImplementedError()
+
+    @staticmethod
+    def get_features(self, feature_codes):
+        features = {x.IDENTIFIER: x for x in Feature.__subclasses__()}
+        return [features[x] for x in feature_codes if x in features]

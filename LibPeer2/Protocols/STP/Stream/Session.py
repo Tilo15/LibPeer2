@@ -16,20 +16,20 @@ import queue
 import math
 
 
-SEGMENT_PAYLOAD_SIZE = 2048
+SEGMENT_PAYLOAD_SIZE = 10240
 METRIC_WINDOW_SIZE = 2
 
 class Session:
 
-    def __init__(self, features, identifier: bytes, ping: float, reference: bytes = b"\x00"*16, ingress = False):
+    def __init__(self, features, identifier: bytes, ping: float, ingress = False):
         # Instansiate class members
         self.ingress = ingress
         self.features: List[Feature] = [x() for x in features]
         self.identifier = identifier
-        self.reference = reference
         self.open = True
 
         self.outgoing_segment_queue = queue.Queue()
+        self.last_send = 0
 
         self.best_ping = ping
         self.window_size = METRIC_WINDOW_SIZE
@@ -40,18 +40,21 @@ class Session:
         self.segment_queue = queue.Queue()
         self.in_flight = {}
         self.segment_trips = set()
-        self.segment_subjects = {}
+        self.segment_trackers = {}
         
         self.reconstruction = {}
         self.next_expected_sequence_number = 0
         self.incoming_app_data = rx.subjects.Subject()
+
+        self.reply_subject = None
 
         if(ingress):
             close_subject = rx.subjects.Subject()
             close_subject.subscribe(None, None, self.__handle_app_close)
             self.stream = IngressStream(self.incoming_app_data, close_subject)
         else:
-            self.stream = EgressStream(self.__handle_app_data, self.__handle_app_close)
+            self.reply_subject = rx.subjects.Subject()
+            self.stream = EgressStream(self.__handle_app_data, self.__handle_app_close, self.reply_subject)
 
 
     def has_pending_segment(self):
@@ -62,19 +65,23 @@ class Session:
         return self.outgoing_segment_queue.qsize() > 0
 
 
-    def get_pending_segment(self, stream):
-        segment: Segment = self.outgoing_segment_queue.get_nowait()
-        segment.serialise(stream)
+    def get_pending_segment(self, stream) -> Segment:
+        segment = self.outgoing_segment_queue.get_nowait()
+        self.last_send = time.time()
+        return segment
 
 
-    def process_segment(self, stream):
+    def process_segment(self, segment):
         # We have received a segment from the muxer
-        segment = Segment.deserialise(stream)
-
         # Figure out the segment type
         if(isinstance(segment, Acknowledgement)):
             # We have an acknowledgement segment, remove payload segment from in-flight
             del self.in_flight[segment.sequence_number]
+
+            # Do we have a tracking object for this?
+            if(segment.sequence_number in self.segment_trackers):
+                # Yes, notify it (TODO maybe put this into a queue so as not to block the network rx thread)
+                self.segment_trackers[segment].complete(segment.sequence_number)
 
             # What was the time difference?
             round_trip = time.time() - segment.timing
@@ -226,30 +233,28 @@ class Session:
 
 
     def __handle_app_data(self, stream):
-        # Figure out what sequence number we need to watch for
-        sequence_number = -1    
+        # Create a send notify subject
+        subject = rx.subjects.Subject()
 
-        # Count the number of segments we create
-        segment_count = 0    
+        # Create a segment tracker
+        tracker = SegmentTracker(subject)
 
         # Get the segment lock
         with self.segment_lock:
             # Create the segments
             for segment in self.__create_payload_segments(stream):
+                # Add the segment to the tracker
+                tracker.add_segment(segment)
+
+                # Add the tracker to the dictionary for this sequence number
+                self.segment_trackers[segment.sequence_number] = tracker
+
                 # Add to the segment queue
                 self.segment_queue.put(segment)
-                sequence_number = segment.sequence_number
-                segment_count += 1
 
         # Did we make any segments?
-        if(sequence_number == -1):
+        if(tracker.segment_count == 0):
             raise OSError("No data to send.")
-
-        # Create a subject
-        subject = rx.subjects.Subject()
-
-        # Add it to our tracker (TODO: This could be a race condition) ALSO, TODO implement good tracking this model won't actually work
-        self.segment_subjects[sequence_number] = (subject, segment_count)
 
         # Return the subject
         return subject
