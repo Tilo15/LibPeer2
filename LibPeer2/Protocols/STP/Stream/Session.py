@@ -17,7 +17,7 @@ import queue
 import math
 
 
-SEGMENT_PAYLOAD_SIZE = 10240
+SEGMENT_PAYLOAD_SIZE = 16384 # TODO this should probably be per session
 METRIC_WINDOW_SIZE = 2
 MAX_WINDOW_SIZE = 65536
 
@@ -84,7 +84,7 @@ class Session:
             if(segment.sequence_number not in self.in_flight):
                 # We must have resent redundantly
                 self.redundant_resends += 1
-                print("REDUNDANT RESEND #{}".format(self.redundant_resends))
+                # print("REDUNDANT RESEND #{}".format(self.redundant_resends))
                 return
 
             # We have an acknowledgement segment, remove payload segment from in-flight
@@ -246,7 +246,7 @@ class Session:
             self.adjustment_delta = 0
 
         # TODO remove
-        print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
+        # print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
 
 
     def __enqueue_segments(self):
