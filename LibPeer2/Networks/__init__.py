@@ -14,7 +14,7 @@ class Network:
     def bring_down(self):
         raise NotImplementedError
 
-    def advertise(self):
+    def advertise(self, instance_reference):
         raise NotImplementedError
 
     def send(self, buffer, peer_info):
