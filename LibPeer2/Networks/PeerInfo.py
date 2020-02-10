@@ -5,11 +5,11 @@ class PeerInfo:
     NETWORK_TYPE = b""
 
     def serialise(self):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @staticmethod
     def _build(stream):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     @staticmethod
     def deserialise(ntype, stream):
@@ -18,3 +18,11 @@ class PeerInfo:
 
         # Return the object
         return peer_info._build(stream)
+
+    
+    def __eq__(self, other):
+        raise NotImplementedError()
+
+
+    def __hash__(self):
+        raise NotImplementedError()
