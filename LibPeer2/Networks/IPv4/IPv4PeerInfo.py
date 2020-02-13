@@ -11,7 +11,7 @@ class IPv4PeerInfo(PeerInfo):
         self.port = port
 
 
-    def serialise(self):
+    def _serialise(self):
         address_parts = [int(x) for x in self.address.split(".")]
         ip_address = struct.pack("!BBBB", *address_parts)
         port = struct.pack("!H", self.port)

@@ -7,7 +7,7 @@ class NetSimPeerInfo(PeerInfo):
     def __init__(self, identifier: bytes):
         self.identifier = identifier
 
-    def serialise(self):
+    def _serialise(self):
         return self.identifier
         
 

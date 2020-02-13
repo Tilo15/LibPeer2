@@ -75,6 +75,11 @@ class MX2:
                 # Send using the network and peer info
                 network.send(frame.serialise(instance.signing_key), peer)
 
+    """Returns peer info on the specified instance"""
+    def get_peer_info(self, instance: InstanceReference) -> PeerInfo:
+        return self.__remote_instance_mapping[instance][1]
+
+
     """Send data to the specified destination"""
     def send(self, instance: Instance, destination: InstanceReference, data):
         # Send payload
