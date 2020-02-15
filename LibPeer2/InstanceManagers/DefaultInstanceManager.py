@@ -24,6 +24,7 @@ class DefaultInstanceManager(InstanceManager):
         self.__peer_subjects: Dict[InstanceReference, ReplaySubject] = {}
 
         self.__network = IPv4("0.0.0.0", 5156)
+        self.__network.bring_up()
         self.__muxer = MX2()
         self.__muxer.register_network(self.__network)
         self.__discoverer = AIP(self.__muxer)
