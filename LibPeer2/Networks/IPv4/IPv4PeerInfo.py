@@ -28,7 +28,7 @@ class IPv4PeerInfo(PeerInfo):
         port_no = struct.unpack("!H", port)[0]
         return IPv4PeerInfo(address, port_no)
 
-    def __eq__(self, other: IPv4PeerInfo):
+    def __eq__(self, other):
         # Do the addresses match?
         if(self.address != other.address):
             return False
