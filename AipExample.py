@@ -65,12 +65,23 @@ class AipExample:
 
 from LibPeer2.Networks.Simulation import Conduit
 from LibPeer2.Networks.Simulation.NetSim import NetSim
+from LibPeer2.Networks.IPv4 import IPv4
 
+import sys
 
 if __name__ == "__main__":
-    conduit = Conduit(False)
 
-    for i in range(2):
-        net = conduit.get_interface(False, 0, 0)
+    network = sys.argv[1]
+    
+    if(network.lower() == "ipv4"):
+        net = IPv4("0.0.0.0", 8091)
         net.bring_up()
         AipExample(net)
+
+    else:
+        conduit = Conduit(False)
+
+        for i in range(2):
+            net = conduit.get_interface(False, 0, 0)
+            net.bring_up()
+            AipExample(net)
