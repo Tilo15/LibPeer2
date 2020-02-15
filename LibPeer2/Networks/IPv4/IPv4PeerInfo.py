@@ -42,4 +42,4 @@ class IPv4PeerInfo(PeerInfo):
 
     
     def __hash__(self):
-        return hash(self.port, self.address)
+        return hash((self.port, self.address))
