@@ -298,6 +298,7 @@ class Session:
 
 
     def __handle_app_close(self):
+        return
         raise NotImplementedError()
 
 

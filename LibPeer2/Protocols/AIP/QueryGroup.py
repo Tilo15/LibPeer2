@@ -9,7 +9,7 @@ class QueryGroup:
         self.instances: Set[InstanceReference] = set()
         self.target = target
 
-    def add_peer(self, instances: InstanceReference):
+    def add_peer(self, instance: InstanceReference):
         self.instances.add(instance)
 
     @property

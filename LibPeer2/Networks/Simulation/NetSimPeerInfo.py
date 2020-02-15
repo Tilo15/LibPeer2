@@ -14,3 +14,10 @@ class NetSimPeerInfo(PeerInfo):
     @staticmethod
     def _build(stream):
         return NetSimPeerInfo(stream.read(16))
+
+
+    def __eq__(self, other):
+        return other.identifier == self.identifier
+
+    def __hash__(self):
+        return hash(self.identifier)

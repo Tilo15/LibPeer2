@@ -17,7 +17,7 @@ class InstanceInformation:
         buffer = BytesIO(b"")
 
         # Write instance reference
-        buffer.write(self.instance_reference.serialise())
+        buffer.write(self.instance_reference.serialise().read())
 
         # Write number of connection methods
         buffer.write(struct.pack("!B", len(self.connection_methods)))
@@ -32,7 +32,9 @@ class InstanceInformation:
 
     
     @staticmethod
-    def deserialise(stream):
+    def deserialise(data):
+        buffer = BytesIO(data)
+
         # Read the instance reference
         instance_reference = InstanceReference.deserialise(buffer)
 

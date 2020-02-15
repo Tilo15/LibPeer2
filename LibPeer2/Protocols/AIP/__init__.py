@@ -21,7 +21,7 @@ import struct
 import random
 import rx
 
-DATA_FOLLOWING_REQUEST = "R"
+DATA_FOLLOWING_REQUEST = b"R"
 DATA_FOLLOWING_QUERY = b"Q"
 DATA_FOLLOWING_ANSWER = b"A"
 
@@ -44,7 +44,7 @@ MAX_QUERY_HOPS = 16
 class AIP:
     
 
-    def __init__(self, muxer: MX2, capabilities = set(CAPABILITY_ADDRESS_INFO, CAPABILITY_FIND_PEERS, CAPABILITY_QUERY_ANSWER)):
+    def __init__(self, muxer: MX2, capabilities = set((CAPABILITY_ADDRESS_INFO, CAPABILITY_FIND_PEERS, CAPABILITY_QUERY_ANSWER))):
 
         self.__application_information: List[ApplicationInformation] = []
 
@@ -59,6 +59,7 @@ class AIP:
         self.__instance_capabilities: Dict[InstanceReference, Set[int]] = {}
         self.__default_group = QueryGroup(20)
         self.__query_groups: Dict[bytes, QueryGroup] = {}
+        self.__reachable_peers: Set[InstanceReference] = set()
 
         self.__instance.incoming_greeting.subscribe(self.__rx_greeting)
         self.__transport.incoming_stream.subscribe(self.__rx_stream)
@@ -68,10 +69,16 @@ class AIP:
         self.__handled_query_ids: Set[bytes] = set()
         self.__peer_info: Set[PeerInfo] = set()
 
+        self.__new_group_peer: Dict[bytes, rx.subjects.Subject] = {}
+        self.__ready = False
+        self.__on_peer_greet: Dict[InstanceReference, rx.subjects.Subject] = {}
+        self.ready = rx.subjects.Subject()
+
 
     def add_network(self, network: Network):
         network.incoming_advertisment.subscribe(self.__rx_advertisement)
         self.__muxer.register_network(network)
+        network.advertise(self.__instance.reference)
 
 
     def add_application(self, application_information: ApplicationInformation):
@@ -80,6 +87,9 @@ class AIP:
 
         # Join group for this application
         self.__join_query_group(application_information.namespace_bytes)
+
+        # Return the observable for this group
+        return self.__new_group_peer[application_information.namespace_bytes]
 
 
     def find_application_instance(self, app: ApplicationInformation):
@@ -93,8 +103,8 @@ class AIP:
         # Send the query
         self.__initiate_query(query, self.__query_groups[app.namespace_bytes])
 
-        # Return the query
-        return query
+        # Return the answer subject
+        return query.answer
 
 
     def find_application_resource(self, app: ApplicationInformation, resource_identifier: bytes):
@@ -144,8 +154,10 @@ class AIP:
 
         # Loop over each instance in the query group
         for instance in group.instances:
-            # Open a stream with the instance
-            self.__transport.initialise_stream(instance).subscribe(on_stream_open)
+            # Is this instance reachable?
+            if(instance in self.__reachable_peers):
+                # Open a stream with the instance
+                self.__transport.initialise_stream(instance).subscribe(on_stream_open)
 
 
     def __send_answer(self, answer: Answer):
@@ -181,14 +193,27 @@ class AIP:
     def __join_query_group(self, group: bytes):
         # Create the query group
         self.__query_groups[group] = QueryGroup()
+        self.__new_group_peer[group] = rx.subjects.Subject()
 
         # Construct a query asking for peers in the group
         query = Query(QUERY_GROUP + group)
 
         # Create handler for query answers
         def on_query_answer(answer: InstanceInformation):
+            # Create a subject so we know when this peer has been greeted
+            self.__on_peer_greet[answer.instance_reference] = rx.subjects.Subject()
+
+            # When is has been greeted, notify the group subject
+            self.__on_peer_greet[answer.instance_reference].subscribe(self.__new_group_peer[group].on_next)
+
             # Inquire
             self.__muxer.inquire(self.__instance, answer.instance_reference, answer.connection_methods)
+
+            # Add to group
+            self.__query_groups[group].add_peer(answer.instance_reference)
+
+        # Subscribe to the answer
+        query.answer.subscribe(on_query_answer)
 
         # Send the query
         self.__initiate_query(query, self.__default_group)
@@ -209,7 +234,7 @@ class AIP:
 
     def __rx_capabilities(self, capabilities: List[bytes], instance: InstanceReference):
         # Save the capabilities
-        self.__capabilities[instance] = capabilities
+        self.__instance_capabilities[instance] = capabilities
 
         # Can we ask the peer for our address?
         if(CAPABILITY_ADDRESS_INFO in capabilities):
@@ -225,6 +250,20 @@ class AIP:
         if(CAPABILITY_QUERY_ANSWER in capabilities):
             # Yes, add to default group
             self.__default_group.add_peer(instance)
+
+            # Peer is now reachable for queries
+            self.__reachable_peers.add(instance)
+
+            # We now have a queryable peer
+            if(not self.__ready):
+                self.__ready = True
+                self.ready.on_next(True)
+                self.ready.on_completed()
+
+            # Does this peer have a subject?
+            if(instance in self.__on_peer_greet):
+                # Notfy
+                self.__on_peer_greet[instance].on_next(instance)
 
 
     def __rx_address(self, info: PeerInfo):
@@ -318,7 +357,7 @@ class AIP:
                 instance = InstanceInformation(self.__instance.reference, self.__peer_info)
 
                 # Send the instance information in the answer
-                answer = Answer(instance.serialise())
+                answer = Answer(instance.serialise(), query.return_path, query.identifier)
 
                 # Send the answer
                 self.__send_answer(answer)
@@ -341,7 +380,7 @@ class AIP:
                         instance = InstanceInformation(app.instance, self.__peer_info)
 
                         # Send the instance information in the answer
-                        self.__send_answer(Answer(instance.serialise()))
+                        self.__send_answer(Answer(instance.serialise(), query.return_path, query.identifier))
 
                 # Forward on to the group
                 self.__send_query(query, self.__query_groups[namespace])
@@ -364,7 +403,7 @@ class AIP:
                         instance = InstanceInformation(app.instance, self.__peer_info)
 
                         # Send the instance information in the answer
-                        self.__send_answer(Answer(instance.serialise()))
+                        self.__send_answer(Answer(instance.serialise(), query.return_path, query.identifier))
 
                 # Forward on to the group
                 self.__send_query(query, self.__query_groups[namespace])
@@ -376,7 +415,7 @@ class AIP:
         request_type = stream.read(1)
 
         # Is the request one of our capabilities?
-        if(request_type not in self.__capabilities):
+        if(request_type != b"C" and request_type not in self.__capabilities):
             # Ignore
             return
 
@@ -395,7 +434,7 @@ class AIP:
 
             elif(request_type == REQUEST_PEERS):
                 # Select up to 5 peers to reply with
-                peers = [x for x in random.sample(self.__default_group.instances, min(5, len(s))) if x in self.__peer_connection_methods]
+                peers = [x for x in random.sample(self.__default_group.instances, min(5, len(self.__reachable_peers))) if x in self.__peer_connection_methods]
 
                 # Send the count
                 es.write(struct.pack("!B", len(peers)))
@@ -411,15 +450,15 @@ class AIP:
                     es.write(info.serialise())
 
         # Get a reply stream
-        self.__transport.initialise_stream(stream.origin, stream.id).subscribe(handle_stream)
+        self.__transport.initialise_stream(stream.origin, in_reply_to=stream.id).subscribe(handle_stream)
 
         # Have we encountered this peer before?
-        if(instance not in self.__discovered_peers):
+        if(stream.origin not in self.__discovered_peers):
             # No, add it
-            self.__discovered_peers.add(instance)
+            self.__discovered_peers.add(stream.origin)
 
             # Ask for capabilities
-            self.__request_capabilities(instance).subscribe(lambda x: self.__rx_capabilities(x, instance))
+            self.__request_capabilities(stream.origin).subscribe(lambda x: self.__rx_capabilities(x, stream.origin))
 
 
     def __send_request(self, request, instance: InstanceReference):

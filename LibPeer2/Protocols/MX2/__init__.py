@@ -55,6 +55,7 @@ class MX2:
         # Return the instance
         return instance
 
+
     """Given a destination instance. Send inquire packets as instance to every PeerInfo peer in the peers list"""
     def inquire(self, instance: Instance, destination: InstanceReference, peers: List[PeerInfo]):
         # Start timing this
