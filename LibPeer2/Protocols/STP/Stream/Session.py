@@ -246,7 +246,7 @@ class Session:
             self.adjustment_delta = 0
 
         # TODO remove
-        print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
+        # print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
 
 
     def __enqueue_segments(self):

@@ -25,5 +25,21 @@ class IPv4PeerInfo(PeerInfo):
         port = stream.read(2)
 
         address = ".".join(str(int(x)) for x in ip_address)
-        port_no = struct.unpack("!H", port)
+        port_no = struct.unpack("!H", port)[0]
         return IPv4PeerInfo(address, port_no)
+
+    def __eq__(self, other: IPv4PeerInfo):
+        # Do the addresses match?
+        if(self.address != other.address):
+            return False
+
+        # Do the ports match?
+        if(self.port != other.port):
+            return False
+
+        # They match
+        return True
+
+    
+    def __hash__(self):
+        return hash(self.port, self.address)

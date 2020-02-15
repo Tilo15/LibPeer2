@@ -19,6 +19,8 @@ class IngressStream:
 
 
     def __add_buffer(self, buffer):
+        # print(buffer.read())
+        # buffer.seek(0,0) # TODO REMOVE
         self.__queue.put(buffer)
 
     
