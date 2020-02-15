@@ -10,6 +10,7 @@ from LibPeer2.Protocols.AIP.ApplicationInformation import ApplicationInformation
 from LibPeer2.Protocols.AIP.InstanceInformation import InstanceInformation
 from LibPeer2.Networks import Network
 from LibPeer2.Networks.PeerInfo import PeerInfo
+from LibPeer2.Networks.Advertisement import Advertisement
 
 from typing import Dict
 from typing import Set
@@ -53,7 +54,7 @@ class AIP:
         self.__instance = muxer.create_instance("AIP")
         self.__transport = STP(self.__muxer, self.__instance)
     
-        self.__discovered_peers = set()
+        self.__discovered_peers: Set[InstanceReference] = set()
         self.__peer_connection_methods: Dict[InstanceReference, Set[PeerInfo]] = {}
         self.__instance_capabilities: Dict[InstanceReference, Set[int]] = {}
         self.__default_group = QueryGroup(20)
@@ -66,10 +67,10 @@ class AIP:
         self.__query_response_count = TTLCache(65536, 120)
         self.__handled_query_ids: Set[bytes] = set()
         self.__peer_info: Set[PeerInfo] = set()
-    
+
 
     def add_network(self, network: Network):
-        network.incoming_advertisment.subscribe(self.rx_advertisement)
+        network.incoming_advertisment.subscribe(self.__rx_advertisement)
         self.__muxer.register_network(network)
 
 
@@ -79,6 +80,41 @@ class AIP:
 
         # Join group for this application
         self.__join_query_group(application_information.namespace_bytes)
+
+
+    def find_application_instance(self, app: ApplicationInformation):
+        # Are we in a query group for this application yet?
+        if(app.namespace_bytes not in self.__query_groups):
+            raise Exception("Not in query group for specified application namespace")
+
+        # Create the query
+        query = Query(QUERY_APPLICATION + app.namespace_bytes)
+
+        # Send the query
+        self.__initiate_query(query, self.__query_groups[app.namespace_bytes])
+
+        # Return the query
+        return query
+
+
+    def find_application_resource(self, app: ApplicationInformation, resource_identifier: bytes):
+        # Are we in a query group for this application yet?
+        if(app.namespace_bytes not in self.__query_groups):
+            raise Exception("Not in query group for specified application namespace")
+
+        # Is the resource identifier valid?
+        if(len(resource_identifier) != 32):
+            raise Exception("Resource identifier not 32 bytes.")
+
+        # Create the query
+        query = Query(QUERY_APPLICATION_RESOURCE + resource_identifier + app.namespace_bytes)
+
+        # Send the query
+        self.__initiate_query(query, self.__query_groups[app.namespace_bytes])
+
+        # Return the query
+        return query
+
 
 
     def __initiate_query(self, query: Query, group: QueryGroup):
@@ -141,8 +177,6 @@ class AIP:
         # Open a stream with the instance
         self.__transport.initialise_stream(send_to).subscribe(on_stream_open)
 
-            
-
 
     def __join_query_group(self, group: bytes):
         # Create the query group
@@ -151,13 +185,62 @@ class AIP:
         # Construct a query asking for peers in the group
         query = Query(QUERY_GROUP + group)
 
+        # Create handler for query answers
+        def on_query_answer(answer: InstanceInformation):
+            # Inquire
+            self.__muxer.inquire(self.__instance, answer.instance_reference, answer.connection_methods)
+
         # Send the query
         self.__initiate_query(query, self.__default_group)
 
 
+    def __rx_advertisement(self, advertisement: Advertisement):
+        # Send an inquiry
+        self.__muxer.inquire(self.__instance, advertisement.instance_reference, [advertisement.peer_info])
 
-    def __rx_greeting(self, greeting):
-        pass
+
+    def __rx_greeting(self, greeting: InstanceReference):
+        # Add to known peers
+        self.__discovered_peers.add(greeting)
+
+        # Request capabilities from the instance
+        self.__request_capabilities(greeting).subscribe(lambda x: self.__rx_capabilities(x, greeting))
+
+
+    def __rx_capabilities(self, capabilities: List[bytes], instance: InstanceReference):
+        # Save the capabilities
+        self.__capabilities[instance] = capabilities
+
+        # Can we ask the peer for our address?
+        if(CAPABILITY_ADDRESS_INFO in capabilities):
+            # Yes, do it
+            self.__request_address(instance).subscribe(self.__rx_address)
+
+        # Can we ask the peer for other peers?
+        if(CAPABILITY_FIND_PEERS in capabilities):
+            # Yes, do it
+            self.__request_peers(instance).subscribe(self.__rx_peers)
+
+        # Can we send queries and answers to this peer?
+        if(CAPABILITY_QUERY_ANSWER in capabilities):
+            # Yes, add to default group
+            self.__default_group.add_peer(instance)
+
+
+    def __rx_address(self, info: PeerInfo):
+        # We received peer info, add to our set
+        self.__peer_info.add(info)
+
+
+    def __rx_peers(self, peers: List[InstanceInformation]):
+        # We received a list of peers running AIP, do we want more peers?
+        if(not self.__default_group.actively_connect):
+            # Don't worry bout it
+            return
+
+        # Send out inquries to the peers
+        for peer in peers:
+            self.__muxer.inquire(self.__instance, peer.instance_reference, peer.connection_methods)
 
 
     def __rx_stream(self, stream: IngressStream):
@@ -329,6 +412,14 @@ class AIP:
 
         # Get a reply stream
         self.__transport.initialise_stream(stream.origin, stream.id).subscribe(handle_stream)
+
+        # Have we encountered this peer before?
+        if(instance not in self.__discovered_peers):
+            # No, add it
+            self.__discovered_peers.add(instance)
+
+            # Ask for capabilities
+            self.__request_capabilities(instance).subscribe(lambda x: self.__rx_capabilities(x, instance))
 
 
     def __send_request(self, request, instance: InstanceReference):
