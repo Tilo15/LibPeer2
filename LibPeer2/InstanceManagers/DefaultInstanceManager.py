@@ -88,7 +88,7 @@ class DefaultInstanceManager(InstanceManager):
         self.__muxer.inquire(self.__instance, instance_info.instance_reference, instance_info.connection_methods)
 
 
-    def __found_resource_instance(self, instance_info: InstanceInformation, resouce: bytes):
+    def __found_resource_instance(self, instance_info: InstanceInformation, resource: bytes):
         # Get the resource subject
         resource_subject = self.__resource_subjects[resource]
 
@@ -131,6 +131,6 @@ class DefaultInstanceManager(InstanceManager):
             return self.__peer_subjects[ref]
 
         # No, create it
-        subject = Subject()
+        subject = ReplaySubject()
         self.__peer_subjects[ref] = subject
         return subject
