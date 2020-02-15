@@ -28,14 +28,15 @@ class DefaultInstanceManager(InstanceManager):
         self.__muxer = MX2()
         self.__muxer.register_network(self.__network)
         self.__discoverer = AIP(self.__muxer)
-        self.__discoverer.add_network(self.__network)
         self.__instance = self.__muxer.create_instance(self.namespace)
-        self.__info = ApplicationInformation.from_instance(self.__instance)
         self.__transport = STP(self.__muxer, self.__instance)
 
         self.__discoverer.ready.subscribe(self.__aip_ready)
         self.__instance.incoming_greeting.subscribe(self.__received_greeting)
         self.__transport.incoming_stream.subscribe(self.__new_stream)
+
+        self.__discoverer.add_network(self.__network)
+        self.__info = ApplicationInformation.from_instance(self.__instance)
 
 
     def establish_stream(self, peer: InstanceReference, *, in_reply_to = None) -> Subject:
@@ -74,7 +75,7 @@ class DefaultInstanceManager(InstanceManager):
     
     def __new_aip_app_peer(self, instance):
         # Query for application instances
-        self.__discoverer.find_application_instance(self.__info).subscribe()
+        self.__discoverer.find_application_instance(self.__info).subscribe(self.__found_instance)
 
     
     def __found_instance(self, instance_info: InstanceInformation):
@@ -112,7 +113,7 @@ class DefaultInstanceManager(InstanceManager):
         self.__reachable_peers.add(instance)
 
         # Notify instance subject
-        self.__get_instance_subject(instance_info.instance_reference).on_next(instance)
+        self.__get_instance_subject(instance).on_next(instance)
 
         # Notify the app
         self.new_peer.on_next(instance)

@@ -74,7 +74,7 @@ if __name__ == "__main__":
     network = sys.argv[1]
     
     if(network.lower() == "ipv4"):
-        net = IPv4("0.0.0.0", 8091)
+        net = IPv4("0.0.0.0", 5156)
         net.bring_up()
         AipExample(net)
 
