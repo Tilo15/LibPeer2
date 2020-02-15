@@ -1,5 +1,4 @@
+from LibPeer2.InstanceManagers.DefaultInstanceManager import DefaultInstanceManager
 
-class InstanceManager:
-    
-    def __init__(self, application_namespace):
-        pass
+def InstanceManager(namespace: str):
+    return DefaultInstanceManager(namespace)
