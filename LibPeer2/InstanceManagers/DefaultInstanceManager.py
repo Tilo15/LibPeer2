@@ -23,8 +23,18 @@ class DefaultInstanceManager(InstanceManager):
         self.__resource_subjects: Dict[bytes, ReplaySubject] = {}
         self.__peer_subjects: Dict[InstanceReference, ReplaySubject] = {}
 
-        self.__network = IPv4("0.0.0.0", 5156)
-        self.__network.bring_up()
+        port = 5156
+        while True:
+            try:
+                self.__network = IPv4("0.0.0.0", port)
+                self.__network.bring_up()
+                break
+            except Exception as e:
+                if(port >= 9000):
+                    raise e
+
+                port += 1
+
         self.__muxer = MX2()
         self.__muxer.register_network(self.__network)
         self.__discoverer = AIP(self.__muxer)
