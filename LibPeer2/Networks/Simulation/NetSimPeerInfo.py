@@ -12,7 +12,7 @@ class NetSimPeerInfo(PeerInfo):
         
 
     @staticmethod
-    def _build(stream):
+    def _build(stream, length):
         return NetSimPeerInfo(stream.read(16))
 
 

@@ -20,7 +20,7 @@ class IPv4PeerInfo(PeerInfo):
         
 
     @staticmethod
-    def _build(stream):
+    def _build(stream, length):
         ip_address = stream.read(4)
         port = stream.read(2)
 
