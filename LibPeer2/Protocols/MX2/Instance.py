@@ -26,7 +26,6 @@ class Instance:
 
         # Create subject for newly reachable instances
         self.incoming_greeting = rx.subjects.Subject()
-
     
     @property
     def reference(self) -> InstanceReference:

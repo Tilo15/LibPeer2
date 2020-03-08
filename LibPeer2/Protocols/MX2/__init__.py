@@ -2,6 +2,7 @@ from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 from LibPeer2.Protocols.MX2.Instance import Instance
 from LibPeer2.Protocols.MX2.Frame import Frame
 from LibPeer2.Protocols.MX2.Packet import Packet
+from LibPeer2.Protocols.MX2.Inquiry import Inquiry
 from LibPeer2.Networks.Receiption import Receiption
 from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Networks import Network
@@ -11,6 +12,8 @@ from cachetools import TTLCache
 from typing import Dict
 from typing import Tuple
 from typing import List
+from threading import Timer
+from rx.subjects import Subject
 
 import uuid
 import time
@@ -26,7 +29,7 @@ class MX2:
         self.__networks: Dict[bytes, Network] = {}
         self.__instances: Dict[InstanceReference, Instance] = {}
         self.__remote_instance_mapping: Dict[InstanceReference, Tuple[Network, PeerInfo]] = {}
-        self.__inquire_timer = TTLCache(512, 120)
+        self.__inquiries = TTLCache(512, 120)
         self.__pings: Dict[InstanceReference, float] = {}
 
 
@@ -58,8 +61,9 @@ class MX2:
 
     """Given a destination instance. Send inquire packets as instance to every PeerInfo peer in the peers list"""
     def inquire(self, instance: Instance, destination: InstanceReference, peers: List[PeerInfo]):
-        # Start timing this
-        self.__inquire_timer[destination] = time.time()
+        # Create an inquiry
+        inquiry = Inquiry(destination)
+        self.__inquiries[inquiry.id] = inquiry
 
         # Loop over each peer to try
         for peer in peers:
@@ -71,10 +75,13 @@ class MX2:
             # Loop over the networks that match the type
             for network in self.__networks[peer.NETWORK_TYPE]:
                 # Create a frame containing an inquire packet
-                frame = Frame(destination, instance.reference, BytesIO(MX2.PACKET_INQUIRE + instance.application_namespace.encode("utf-8")))
+                frame = Frame(destination, instance.reference, BytesIO(MX2.PACKET_INQUIRE + inquiry.id + instance.application_namespace.encode("utf-8")))
 
                 # Send using the network and peer info
                 network.send(frame.serialise(instance.signing_key), peer)
+
+        return inquiry.complete
+
 
     """Returns peer info on the specified instance"""
     def get_peer_info(self, instance: InstanceReference) -> PeerInfo:
@@ -120,6 +127,9 @@ class MX2:
 
         # Determine what to do
         if(packet_type == MX2.PACKET_INQUIRE):
+            # First 16 bytes of packet is inquiry id
+            inquiry_id = frame.payload.read(16)
+
             # Rest of packet indicates desired application name
             application_namespace = frame.payload.read().decode("utf-8")
 
@@ -128,8 +138,8 @@ class MX2:
                 # Yes! Save this instance's information locally for use later
                 self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info)
 
-                # Reply with a greeting (and a throwaway UUID so we aren't just encrypting one byte)
-                self.__send_packet(instance, frame.origin, BytesIO(MX2.PACKET_GREET + uuid.uuid4().bytes))
+                # Reply with a greeting and the inquiry id
+                self.__send_packet(instance, frame.origin, BytesIO(MX2.PACKET_GREET + inquiry_id))
 
         elif(packet_type == MX2.PACKET_GREET):
             # We received a greeting!
@@ -138,10 +148,13 @@ class MX2:
                 # No, this is the first (therefore, least latent) method of talking to this instance
                 self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info)
 
+                # Read inquiry id
+                inquiry_id = frame.payload.read(16)
+
                 # Get ping
                 ping = 120.0
-                if(frame.origin in self.__inquire_timer):
-                    ping = self.__inquire_timer[frame.origin]
+                if(inquiry_id in self.__inquiries):
+                    ping = self.__inquiries[inquiry_id].response_received()
 
                 # Save ping
                 self.__pings[frame.origin] = ping

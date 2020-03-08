@@ -16,8 +16,10 @@ from rx.subjects import Subject
 
 class DefaultInstanceManager(InstanceManager):
 
-    def __init__(self, namespace: str):
+    def __init__(self, namespace: str, try_routes = True):
         super().__init__(namespace)
+
+        self.try_routes = try_routes
 
         self.__reachable_peers: Set[InstanceReference] = set()
         self.__resource_subjects: Dict[bytes, ReplaySubject] = {}
@@ -95,7 +97,11 @@ class DefaultInstanceManager(InstanceManager):
             return
 
         # Inquire about the peer
-        self.__muxer.inquire(self.__instance, instance_info.instance_reference, instance_info.connection_methods)
+        subject = self.__muxer.inquire(self.__instance, instance_info.instance_reference, instance_info.connection_methods)
+
+        # Handle timeouts
+        subject.subscribe(on_error=lambda x: self.__greeting_timeout(instance_info.instance_reference, instance_info.aip_instance))
+
 
 
     def __found_resource_instance(self, instance_info: InstanceInformation, resource: bytes):
@@ -144,3 +150,26 @@ class DefaultInstanceManager(InstanceManager):
         subject = ReplaySubject()
         self.__peer_subjects[ref] = subject
         return subject
+
+
+    def __greeting_timeout(self, target: InstanceReference, router: InstanceReference):
+        # Have we already found this peer?
+        if(target in self.__instance.reachable_peers or not self.try_routes):
+            return
+
+        # Did not receive greeting from instance, ask for routes
+        query = self.__discoverer.find_route(router)
+
+        def handle_route(next_router: InstanceInformation):
+            # Have we already found this peer?
+            if(target in self.__instance.reachable_peers):
+                return
+
+            # An AIP peer said that it is connected to the peer and is willing to route, inquire via the router
+            inquire_subject = self.__muxer.inquire(self.__instance, target, next_router.connection_methods)
+
+            # Handle timeout
+            inquire_subject.subscribe(on_error=lambda x: self.__greeting_timeout(target, next_router.aip_instance))
+
+        # Subscribe to answers
+        query.answer.subscribe(handle_route)
