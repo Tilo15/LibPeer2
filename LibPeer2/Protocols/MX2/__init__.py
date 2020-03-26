@@ -12,6 +12,8 @@ from cachetools import TTLCache
 from typing import Dict
 from typing import Tuple
 from typing import List
+from typing import Set
+from typing import Callable
 from threading import Timer
 from rx.subjects import Subject
 
@@ -26,11 +28,12 @@ class MX2:
     PACKET_PAYLOAD = b"\x16"
 
     def __init__(self):
-        self.__networks: Dict[bytes, Network] = {}
+        self.__networks: Dict[bytes, Set[Network]] = {}
         self.__instances: Dict[InstanceReference, Instance] = {}
         self.__remote_instance_mapping: Dict[InstanceReference, Tuple[Network, PeerInfo]] = {}
         self.__inquiries = TTLCache(512, 120)
         self.__pings: Dict[InstanceReference, float] = {}
+        self._interceptor: Callable[Receiption, Receiption] = lambda x: x
 
 
     """Register a network on the MX2 instance, allowing it to use the network to find and talk to instances"""
@@ -87,6 +90,10 @@ class MX2:
     def get_peer_info(self, instance: InstanceReference) -> PeerInfo:
         return self.__remote_instance_mapping[instance][1]
 
+    """Returns network for the specified instance"""
+    def get_peer_network(self, instance: InstanceReference) -> PeerInfo:
+        return self.__remote_instance_mapping[instance][0]
+
 
     """Send data to the specified destination"""
     def send(self, instance: Instance, destination: InstanceReference, data):
@@ -119,6 +126,14 @@ class MX2:
 
 
     def __handle_receiption(self, receiption: Receiption):
+        # Run interceptor
+        receiption = self._interceptor(receiption)
+
+        # Do we have a receiption to handle?
+        if(receiption == None):
+            # No, drop
+            return
+
         # Read frame within receiption
         frame, instance = Frame.deserialise(receiption.stream, self.__instances)
 

@@ -27,7 +27,7 @@ class Query:
 
         # Serialise the return path
         for reference in self.return_path:
-            stream.write(reference.serialise())
+            stream.write(reference.serialise().read())
 
         # Write the query data
         stream.write(self.data)

@@ -20,6 +20,9 @@ class InstanceInformation:
         # Write instance reference
         buffer.write(self.instance_reference.serialise().read())
 
+        # Write the AIP instance reference
+        buffer.write(self.aip_instance.serialise().read())
+
         # Write number of connection methods
         buffer.write(struct.pack("!B", len(self.connection_methods)))
 
@@ -51,4 +54,4 @@ class InstanceInformation:
             methods.append(PeerInfo.deserialise(buffer))
 
         # Return new InstanceInformation object
-        return InstanceInformation(instance_reference, methods, aip_instance)
+        return InstanceInformation(instance_reference, methods, aip_reference)

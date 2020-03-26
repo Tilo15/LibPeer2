@@ -11,6 +11,7 @@ from LibPeer2.Protocols.AIP.InstanceInformation import InstanceInformation
 from LibPeer2.Networks import Network
 from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Networks.Advertisement import Advertisement
+from LibPeer2.Router.Route import Route
 
 from typing import Dict
 from typing import Set
@@ -66,7 +67,7 @@ class AIP:
         self.__instance_capabilities: Dict[InstanceReference, Set[int]] = {}
         self.__default_group = QueryGroup(20)
         self.__query_groups: Dict[bytes, QueryGroup] = {}
-        self.__reachable_peers: Set[InstanceReference] = set()
+        self._instance_touch: Set[InstanceReference] = set()
 
         self.__instance.incoming_greeting.subscribe(self.__rx_greeting)
         self.__transport.incoming_stream.subscribe(self.__rx_stream)
@@ -79,8 +80,15 @@ class AIP:
         self.__new_group_peer: Dict[bytes, rx.subjects.Subject] = {}
         self.__ready = False
         self.__on_peer_greet: Dict[InstanceReference, rx.subjects.Subject] = {}
+
+        self._aip_instance_touch = rx.subjects.Subject()
+        self._aip_instance_association = rx.subjects.Subject()
+        
         self.ready = rx.subjects.Subject()
 
+    @property
+    def instance_reference(self):
+        return self.__instance.reference
 
     def add_network(self, network: Network):
         network.incoming_advertisment.subscribe(self.__rx_advertisement)
@@ -135,7 +143,7 @@ class AIP:
 
     def find_route(self, aip_instance: InstanceReference):
         # Build a query
-        query = Query(QUERY_INSTANCE_ROUTE + aip_instance.serialise())
+        query = Query(QUERY_INSTANCE_ROUTE + aip_instance.serialise().read())
 
         # Send the query
         self.__initiate_query(query, self.__default_group)
@@ -143,9 +151,9 @@ class AIP:
         # Return the query
         return query
 
-    def __inquire_routable(self, instance: Instance, destination: InstanceReference, peers: List[PeerInfo]):
+    def __inquire_routable(self, instance, destination: InstanceReference, peers: List[PeerInfo]):
         # Inquire
-        self.__inquire_routable(instance, destination, peers).subscribe(on_error=lambda x: self.__greeting_timeout(destination, destination))
+        self.__muxer.inquire(instance, destination, peers).subscribe(on_error=lambda x: self.__greeting_timeout(destination, destination))
 
     def __initiate_query(self, query: Query, group: QueryGroup):
         # Save a reference to the query
@@ -242,6 +250,7 @@ class AIP:
     def __rx_advertisement(self, advertisement: Advertisement):
         # Send an inquiry
         self.__muxer.inquire(self.__instance, advertisement.instance_reference, [advertisement.peer_info])
+        print(advertisement.peer_info)
 
 
     def __rx_greeting(self, greeting: InstanceReference):
@@ -284,6 +293,9 @@ class AIP:
             if(instance in self.__on_peer_greet):
                 # Notfy
                 self.__on_peer_greet[instance].on_next(instance)
+
+            # Notify of a new known instance
+            self._aip_instance_touch.on_next(instance)
 
 
     def __rx_address(self, info: PeerInfo):

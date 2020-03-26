@@ -60,8 +60,6 @@ class Frame:
 
         # Do we have an instance matching the destination of this packet?
         if(destination not in instances):
-            print(destination)
-            print(instances)
             # Raise an error
             raise IOError("Received frame does not belong to any current instances")
 
