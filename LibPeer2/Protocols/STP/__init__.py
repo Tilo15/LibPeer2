@@ -86,7 +86,12 @@ class STP:
 
     def __notify(self):
         while True:
-            self.__notification_queue.get()()
+            try:
+                self.__notification_queue.get()()
+            except Exception as e:
+                print(traceback.format_exc())
+                print("Exception executing task in STP notification queue: {}".format(e))
+
 
 
 

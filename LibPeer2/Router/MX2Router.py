@@ -14,7 +14,7 @@ class MX2Router:
 
     def __init__(self):
         self.routes: Dict[InstanceReference, Route] = {}
-        self.will_route: Callable[[InstanceReference, InstanceReference], bool] = lambda x, y: 
+        self.will_route: Callable[[InstanceReference, InstanceReference], bool] = lambda x, y: True
         self.local_destinations: Set[InstanceReference] = set()
         self.muxer = MX2()
         self.muxer._interceptor = self.__handle_receiption
@@ -39,7 +39,7 @@ class MX2Router:
             return None
 
         # Read the destination
-        destination = InstanceReference.deserialise(stream)
+        destination = InstanceReference.deserialise(receiption.stream)
 
         # Is this a local destination?
         if(destination in self.local_destinations):
@@ -54,7 +54,7 @@ class MX2Router:
             return None
 
         # Read the origin
-        origin = InstanceReference.deserialise(stream)
+        origin = InstanceReference.deserialise(receiption.stream)
 
         # Will we route this?
         if(not self.will_route(origin, destination)):

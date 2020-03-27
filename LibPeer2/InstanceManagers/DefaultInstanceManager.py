@@ -158,7 +158,7 @@ class DefaultInstanceManager(InstanceManager):
             return
 
         # Did not receive greeting from instance, ask for routes
-        query = self.__discoverer.find_route(router)
+        query = self.__discoverer.find_route(router, target)
 
         def handle_route(next_router: InstanceInformation):
             # Have we already found this peer?

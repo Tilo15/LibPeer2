@@ -11,8 +11,8 @@ if __name__ == "__main__":
 
     config = RouterConfiguration(
         [
-            conduit1.get_interface(),
-            conduit2.get_interface()
+            conduit1.get_interface(True, 0, 0),
+            conduit2.get_interface(True, 0, 0)
         ]
     )
 
@@ -25,6 +25,10 @@ if __name__ == "__main__":
     net2 = conduit2.get_interface(False, 0, 0)
     net2.bring_up()
     app2 = AipExample.AipExample(net2)
+
+    # net3 = conduit2.get_interface(False, 0, 0)
+    # net3.bring_up()
+    # app3 = AipExample.AipExample(net3)
 
     
 #

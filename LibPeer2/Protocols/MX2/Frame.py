@@ -48,8 +48,10 @@ class Frame:
     @staticmethod
     def deserialise(stream, instances: Dict[InstanceReference, Instance]):
         # Does the stream start with the magic number?
-        if(stream.read(len(Frame.MAGIC_NUMBER)) != Frame.MAGIC_NUMBER):
+        number = stream.read(len(Frame.MAGIC_NUMBER))
+        if(number != Frame.MAGIC_NUMBER):
             # Raise an error
+            print(number)
             raise IOError("Stream did not start with frame magic number.")
 
         # Read the destination

@@ -11,7 +11,6 @@ from LibPeer2.Protocols.AIP.InstanceInformation import InstanceInformation
 from LibPeer2.Networks import Network
 from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Networks.Advertisement import Advertisement
-from LibPeer2.Router.Route import Route
 
 from typing import Dict
 from typing import Set
@@ -31,6 +30,10 @@ DATA_FOLLOWING_ANSWER = b"A"
 REQUEST_CAPABILITIES = b"C"
 REQUEST_ADDRESS = b"A"
 REQUEST_PEERS = b"P"
+REQUEST_ASSOCIATION = b"I"
+
+RESPONSE_ASSOCIATED = b"A"
+RESPONSE_NOT_ASSOCIATED = b"N"
 
 QUERY_GROUP = b"G"
 QUERY_APPLICATION = b"A"
@@ -40,6 +43,7 @@ QUERY_INSTANCE_ROUTE = b"I"
 CAPABILITY_ADDRESS_INFO = b"A"
 CAPABILITY_FIND_PEERS = b"P"
 CAPABILITY_QUERY_ANSWER = b"Q"
+CAPABILITY_ASSOCIATION = b"I"
 
 MAX_QUERY_HOPS = 16
 
@@ -48,7 +52,7 @@ MAX_QUERY_HOPS = 16
 class AIP:
     
 
-    def __init__(self, muxer: MX2, capabilities = set((CAPABILITY_ADDRESS_INFO, CAPABILITY_FIND_PEERS, CAPABILITY_QUERY_ANSWER))):
+    def __init__(self, muxer: MX2, capabilities = set((CAPABILITY_ADDRESS_INFO, CAPABILITY_FIND_PEERS, CAPABILITY_QUERY_ANSWER, CAPABILITY_ASSOCIATION))):
 
         self.can_route = False
         self.will_route: Callable[[InstanceReference, InstanceReference], bool] = lambda x, y: False
@@ -67,7 +71,7 @@ class AIP:
         self.__instance_capabilities: Dict[InstanceReference, Set[int]] = {}
         self.__default_group = QueryGroup(20)
         self.__query_groups: Dict[bytes, QueryGroup] = {}
-        self._instance_touch: Set[InstanceReference] = set()
+        self.__reachable_peers: Set[InstanceReference] = set()
 
         self.__instance.incoming_greeting.subscribe(self.__rx_greeting)
         self.__transport.incoming_stream.subscribe(self.__rx_stream)
@@ -141,9 +145,9 @@ class AIP:
         return query
 
 
-    def find_route(self, aip_instance: InstanceReference):
+    def find_route(self, aip_instance: InstanceReference, app_instance: InstanceReference):
         # Build a query
-        query = Query(QUERY_INSTANCE_ROUTE + aip_instance.serialise().read())
+        query = Query(QUERY_INSTANCE_ROUTE + aip_instance.serialise().read() + app_instance.serialise().read())
 
         # Send the query
         self.__initiate_query(query, self.__default_group)
@@ -442,29 +446,39 @@ class AIP:
                 self.__send_query(query, self.__query_groups[namespace])
 
         elif(query_type == QUERY_INSTANCE_ROUTE):
+            # Get instance data
+            data = BytesIO(query.data[1:])
+
             # Get the instance reference for the target AIP peer
-            reference = InstanceReference.deserialise(BytesIO(query.data[1:]))
+            aip_reference = InstanceReference.deserialise(data)
+
+            # Get the instance reference for the target application peer
+            app_reference = InstanceReference.deserialise(data)
 
             # Do we route?
             if(self.can_route):
                 # Are we connected to this instance directly?
-                if(reference in self.__reachable_peers and reference not in self.__routed_peers):
+                if(aip_reference in self.__reachable_peers and aip_reference not in self.__routed_peers):
                     # Yes, does it fit our routing rules?
-                    if(self.will_route(stream.origin, reference)):
-                        # Yes, create some instance information
-                        instance = InstanceInformation(self.__instance.reference, self.__peer_info, self.__instance.reference)
+                    if(self.will_route(stream.origin, aip_reference)):
+                        # Yes, get ready to ask the target AIP peer if it is associated with the app peer
+                        def callback(is_associated):      
+                            # Is the aip peer assciated?
+                            if(is_associated):
+                                # Yes, Get some instance informaiton ready
+                                instance = InstanceInformation(self.__instance.reference, self.__peer_info, self.__instance.reference)
 
-                        # Send the instance information in the answer
-                        answer = Answer(instance.serialise(), answer_path, query.identifier)
+                                # Send the instance information in the answer
+                                answer = Answer(instance.serialise(), answer_path, query.identifier)
 
-                        # Send the answer
-                        self.__send_answer(answer)
+                                # Send the answer
+                                self.__send_answer(answer)
+
+                        # Ask the target
+                        self.__request_association(aip_reference, app_reference).subscribe(callback)
 
             # This is a query for a route, forward on to default group
             self.__send_query(query, self.__default_group)
-
-
-
 
 
     def __handle_request(self, stream: IngressStream):
@@ -491,7 +505,7 @@ class AIP:
 
             elif(request_type == REQUEST_PEERS):
                 # Select up to 5 peers to reply with
-                peers = [x for x in random.sample(self.__default_group.instances, min(5, len(self.__reachable_peers))) if x in self.__peer_connection_methods]
+                peers = []# [x for x in random.sample(self.__default_group.instances, min(5, len(self.__reachable_peers))) if x in self.__peer_connection_methods]
 
                 # Send the count
                 es.write(struct.pack("!B", len(peers)))
@@ -505,6 +519,37 @@ class AIP:
 
                     # Write the object to the stream
                     es.write(info.serialise())
+
+                es.close()
+
+            elif(request_type == REQUEST_ASSOCIATION):
+                # Read the target reference
+                instance = InstanceReference.deserialise(stream)
+
+                # Value to determine if we are associated with the instance
+                is_associated = False
+
+                # # Is the target applicaition this?
+                if(self.__instance.reference == instance):
+                    # We are associated because it's this class
+                    is_associated = True
+
+                # Will we route to this instance?
+                elif(self.will_route(stream.origin, instance)):
+                    # We are associated because we will route
+                    is_associated = True
+
+                elif(any(x.instance == instance for x in self.__application_information)):
+                    # We are associated because it is on this computer
+                    is_associated = True
+
+                if(is_associated):
+                    es.write(RESPONSE_ASSOCIATED)
+                else:
+                    es.write(RESPONSE_NOT_ASSOCIATED)
+
+                es.close()
+
 
         # Get a reply stream
         self.__transport.initialise_stream(stream.origin, in_reply_to=stream.id).subscribe(handle_stream)
@@ -561,7 +606,7 @@ class AIP:
     def __request_address(self, instance: InstanceReference):
         # Don't request address from routed peers
         if(instance in self.__routed_peers):
-            return
+            raise IOError("It is against protocol to respond to address requests from AIP peers connected via a router")
 
         # Create the subject
         reply = rx.subjects.Subject()
@@ -603,7 +648,30 @@ class AIP:
         # Make the request
         self.__send_request(REQUEST_PEERS, instance).subscribe(on_reply)
         return reply
- 
+
+
+    def __request_association(self, aip_instance: InstanceReference, app_instance: InstanceReference):
+        # Create the subject
+        reply = rx.subjects.Subject()
+
+        # Handler for the reply
+        def on_reply(stream: IngressStream):
+            # Read association status
+            association_status = stream.read(1)
+
+            # Is it associated?
+            if(association_status == RESPONSE_ASSOCIATED):
+                # Yes, notify interested subscribers
+                self._aip_instance_association.on_next((aip_instance, app_instance))
+
+            # Notify subscriber
+            reply.on_next(association_status == RESPONSE_ASSOCIATED)
+            reply.on_completed()
+
+        # Make the request
+        self.__send_request(REQUEST_ASSOCIATION + app_instance.serialise().read(), aip_instance).subscribe(on_reply)
+        return reply
+
 
     def __greeting_timeout(self, target: InstanceReference, router: InstanceReference):
         # Have we already found this peer?
@@ -611,7 +679,7 @@ class AIP:
             return
 
         # Did not receive greeting from instance, ask for routes
-        query = self.find_route(router)
+        query = self.find_route(router, target)
 
         def handle_route(router_aip: InstanceInformation):
             # Have we already found this peer?
@@ -621,11 +689,8 @@ class AIP:
             # An AIP peer said that it is connected to the peer and is willing to route, inquire via the router
             inquire_subject = self.__muxer.inquire(self.__instance, target, router_aip.connection_methods)
 
-            # Handle timeout
-            inquire_subject.subscribe(on_error=lambda x: self.__greeting_timeout(target, router_aip.instance_reference))
-
-            # Handle success
-            inquire_subject.subscribe(on_next=lambda x: self.__routed_peers.add(target))
+            # Handle timeout and success
+            inquire_subject.subscribe(on_error=lambda x: self.__greeting_timeout(target, router_aip.instance_reference), on_next=lambda x: self.__routed_peers.add(target))
 
         # Subscribe to answers
         query.answer.subscribe(handle_route)
