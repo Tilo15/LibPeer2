@@ -185,7 +185,7 @@ class AIP:
             stream.close()
 
         # Loop over each instance in the query group
-        for instance in group.instances:
+        for instance in group.instances.copy():
             # Is this instance reachable?
             if(instance in self.__reachable_peers):
                 # Open a stream with the instance
@@ -270,7 +270,7 @@ class AIP:
         self.__instance_capabilities[instance] = capabilities
 
         # Can we ask the peer for our address?
-        if(CAPABILITY_ADDRESS_INFO in capabilities):
+        if(CAPABILITY_ADDRESS_INFO in capabilities and instance not in self.__routed_peers):
             # Yes, do it
             self.__request_address(instance).subscribe(self.__rx_address)
 
@@ -298,8 +298,8 @@ class AIP:
                 # Notfy
                 self.__on_peer_greet[instance].on_next(instance)
 
-            # Notify of a new known instance
-            self._aip_instance_touch.on_next(instance)
+        # Notify of a new known instance
+        self._aip_instance_touch.on_next(instance)
 
 
     def __rx_address(self, info: PeerInfo):

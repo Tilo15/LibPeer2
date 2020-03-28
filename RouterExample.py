@@ -3,7 +3,7 @@ from LibPeer2.Router import BasicRouter
 
 from LibPeer2.Networks.Simulation import Conduit
 
-import AipExample
+import AppExample
 
 if __name__ == "__main__":
     conduit1 = Conduit(False)
@@ -11,20 +11,20 @@ if __name__ == "__main__":
 
     config = RouterConfiguration(
         [
-            conduit1.get_interface(True, 0, 0),
-            conduit2.get_interface(True, 0, 0)
+            conduit1.get_interface(False, 0, 0.0),
+            conduit2.get_interface(False, 0, 0.0)
         ]
     )
 
     router = BasicRouter(config)
 
-    net1 = conduit1.get_interface(False, 0, 0)
+    net1 = conduit1.get_interface(False, 0, 0.0)
     net1.bring_up()
-    app1 = AipExample.AipExample(net1)
+    app1 = AppExample.AppExample([net1])
 
-    net2 = conduit2.get_interface(False, 0, 0)
+    net2 = conduit2.get_interface(False, 0, 0.0)
     net2.bring_up()
-    app2 = AipExample.AipExample(net2)
+    app2 = AppExample.AppExample([net2])
 
     # net3 = conduit2.get_interface(False, 0, 0)
     # net3.bring_up()

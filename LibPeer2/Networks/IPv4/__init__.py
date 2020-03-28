@@ -80,13 +80,13 @@ class IPv4(Network):
                 datagram, sender = self.__socket.recvfrom(65536)
 
                 # Put the datagram into a buffer
-                buffer = BytesIO(datagram)
+                buffer = BytesIO(datagram[1:])
 
                 # Create peer info
                 info = IPv4PeerInfo(sender[0], sender[1])
 
                 # Read the datagram type
-                dgram_type = buffer.read(1)
+                dgram_type = datagram[:1]
 
                 # Regular data packet
                 if(dgram_type == DGRAM_DATA):                    

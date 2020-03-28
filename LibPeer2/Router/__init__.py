@@ -38,6 +38,7 @@ class BasicRouter:
 
 
     def __new_association(self, instances):
+        print("Association: {}\t==\t{}".format(str(instances[0]).split('"')[1][:6], str(instances[1]).split('"')[1][:6]))
         original = self.frame_router.routes[instances[0]]
         route = Route(instances[1], original.peer, original.network)
         self.frame_router.add_route(route)

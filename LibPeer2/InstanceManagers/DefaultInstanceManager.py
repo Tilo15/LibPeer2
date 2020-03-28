@@ -16,7 +16,7 @@ from rx.subjects import Subject
 
 class DefaultInstanceManager(InstanceManager):
 
-    def __init__(self, namespace: str, try_routes = True):
+    def __init__(self, namespace: str, try_routes = True, networks = []):
         super().__init__(namespace)
 
         self.try_routes = try_routes
@@ -24,21 +24,27 @@ class DefaultInstanceManager(InstanceManager):
         self.__reachable_peers: Set[InstanceReference] = set()
         self.__resource_subjects: Dict[bytes, ReplaySubject] = {}
         self.__peer_subjects: Dict[InstanceReference, ReplaySubject] = {}
+        self.__networks = networks
 
-        port = 5156
-        while True:
-            try:
-                self.__network = IPv4("0.0.0.0", port)
-                self.__network.bring_up()
-                break
-            except Exception as e:
-                if(port >= 9000):
-                    raise e
+        if(len(self.__networks) == 0):
+            port = 5156
+            while True:
+                try:
+                    network = IPv4("0.0.0.0", port)
+                    self.__networks.append(network)
+                    break
+                except Exception as e:
+                    if(port >= 9000):
+                        raise e
 
-                port += 1
+                    port += 1
 
         self.__muxer = MX2()
-        self.__muxer.register_network(self.__network)
+
+        for network in self.__networks:
+            network.bring_up()
+            self.__muxer.register_network(network)
+
         self.__discoverer = AIP(self.__muxer)
         self.__instance = self.__muxer.create_instance(self.namespace)
         self.__transport = STP(self.__muxer, self.__instance)
@@ -47,7 +53,9 @@ class DefaultInstanceManager(InstanceManager):
         self.__instance.incoming_greeting.subscribe(self.__received_greeting)
         self.__transport.incoming_stream.subscribe(self.__new_stream)
 
-        self.__discoverer.add_network(self.__network)
+        for network in self.__networks:
+            self.__discoverer.add_network(network)
+
         self.__info = ApplicationInformation.from_instance(self.__instance)
 
 

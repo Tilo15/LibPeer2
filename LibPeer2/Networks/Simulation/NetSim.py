@@ -4,6 +4,8 @@ from LibPeer2.Networks.Receiption import Receiption
 from LibPeer2.Networks.Advertisement import Advertisement
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 
+from io import BytesIO
+
 import threading
 import queue
 import time
@@ -29,7 +31,7 @@ class NetSim(Network):
 
     def bring_up(self):
         self.up = True
-        threading.Thread(target=self.__loop).start()
+        threading.Thread(target=self.__loop, name="NetSim Interface {}".format(self.count)).start()
 
     def bring_down(self):
         self.up = False
@@ -39,7 +41,13 @@ class NetSim(Network):
         self.conduit.advertise(self.identifier, advetrisement)
 
     def send(self, buffer, peer_info: NetSimPeerInfo):
-        threading.Thread(name="Packet latency timer", target=self.__send, args=(buffer, peer_info)).start()
+        data = buffer.read()
+
+        # TODO REMOVE
+        if(data[:3] != b"MX2"):
+            print("INVALID MAGIC NUMBER:", data)
+
+        threading.Thread(name="Packet latency timer", target=self.__send, args=(BytesIO(data), peer_info)).start()
 
     def __send(self, buffer, peer_info: NetSimPeerInfo):
         time.sleep(self.latency)

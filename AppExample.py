@@ -3,8 +3,8 @@ from LibPeer2 import InstanceManager
 
 class AppExample:
 
-    def __init__(self):
-        self.manager = InstanceManager("AppExample")
+    def __init__(self, networks = []):
+        self.manager = InstanceManager("AppExample", networks)
         self.manager.new_peer.subscribe(self.on_new_peer)
         self.manager.new_stream.subscribe(self.on_incoming_stream)
         self.manager.resources.add(b"HI"*16)
