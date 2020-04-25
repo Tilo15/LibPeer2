@@ -69,10 +69,10 @@ class AIP:
         self.__handled_query_ids: Set[bytes] = set()
         self.__peer_info: Set[PeerInfo] = set()
 
-        self.__new_group_peer: Dict[bytes, rx.subjects.Subject] = {}
+        self.__new_group_peer: Dict[bytes, rx.subject.Subject] = {}
         self.__ready = False
-        self.__on_peer_greet: Dict[InstanceReference, rx.subjects.Subject] = {}
-        self.ready = rx.subjects.Subject()
+        self.__on_peer_greet: Dict[InstanceReference, rx.subject.Subject] = {}
+        self.ready = rx.subject.Subject()
 
 
     def add_network(self, network: Network):
@@ -193,7 +193,7 @@ class AIP:
     def __join_query_group(self, group: bytes):
         # Create the query group
         self.__query_groups[group] = QueryGroup()
-        self.__new_group_peer[group] = rx.subjects.Subject()
+        self.__new_group_peer[group] = rx.subject.Subject()
 
         # Construct a query asking for peers in the group
         query = Query(QUERY_GROUP + group)
@@ -201,7 +201,7 @@ class AIP:
         # Create handler for query answers
         def on_query_answer(answer: InstanceInformation):
             # Create a subject so we know when this peer has been greeted
-            self.__on_peer_greet[answer.instance_reference] = rx.subjects.Subject()
+            self.__on_peer_greet[answer.instance_reference] = rx.subject.Subject()
 
             # When is has been greeted, notify the group subject
             self.__on_peer_greet[answer.instance_reference].subscribe(self.__new_group_peer[group].on_next)
@@ -463,7 +463,7 @@ class AIP:
 
     def __send_request(self, request, instance: InstanceReference):
         # Create the reply subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Create a handler
         def on_stream_open(stream: EgressStream):
@@ -482,7 +482,7 @@ class AIP:
 
     def __request_capabilities(self, instance: InstanceReference):
         # Create the subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Handler for the reply
         def on_reply(stream: IngressStream):
@@ -503,7 +503,7 @@ class AIP:
 
     def __request_address(self, instance: InstanceReference):
         # Create the subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Handler for the reply
         def on_reply(stream: IngressStream):
@@ -521,7 +521,7 @@ class AIP:
 
     def __request_peers(self, instance: InstanceReference):
         # Create the subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Handler for the reply
         def on_reply(stream: IngressStream):

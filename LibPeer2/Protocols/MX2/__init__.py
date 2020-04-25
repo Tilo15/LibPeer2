@@ -113,7 +113,10 @@ class MX2:
 
     def __handle_receiption(self, receiption: Receiption):
         # Read frame within receiption
-        frame, instance = Frame.deserialise(receiption.stream, self.__instances)
+        try:
+            frame, instance = Frame.deserialise(receiption.stream, self.__instances)
+        except:
+            return
 
         # Read packet type
         packet_type = frame.payload.read(1)

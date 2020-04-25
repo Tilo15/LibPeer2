@@ -48,9 +48,10 @@ class Frame:
     @staticmethod
     def deserialise(stream, instances: Dict[InstanceReference, Instance]):
         # Does the stream start with the magic number?
-        if(stream.read(len(Frame.MAGIC_NUMBER)) != Frame.MAGIC_NUMBER):
+        magic = stream.read(len(Frame.MAGIC_NUMBER))
+        if(magic != Frame.MAGIC_NUMBER):
             # Raise an error
-            raise IOError("Stream did not start with frame magic number.")
+            raise IOError("Stream did not start with frame magic number: {}".format(str(magic)))
 
         # Read the destination
         destination = InstanceReference.deserialise(stream)
@@ -60,8 +61,6 @@ class Frame:
 
         # Do we have an instance matching the destination of this packet?
         if(destination not in instances):
-            print(destination)
-            print(instances)
             # Raise an error
             raise IOError("Received frame does not belong to any current instances")
 

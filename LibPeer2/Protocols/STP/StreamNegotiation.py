@@ -17,4 +17,4 @@ class StreamNegotiation:
         self.remote_instance = instance_reference
         self.ping = 120
         self.ingress = ingress
-        self.notify = rx.subjects.Subject()
+        self.notify = rx.subject.Subject()

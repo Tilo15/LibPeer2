@@ -49,16 +49,16 @@ class Session:
         
         self.reconstruction = {}
         self.next_expected_sequence_number = 0
-        self.incoming_app_data = rx.subjects.Subject()
+        self.incoming_app_data = rx.subject.Subject()
 
         self.reply_subject = None
 
         if(ingress):
-            close_subject = rx.subjects.Subject()
+            close_subject = rx.subject.Subject()
             close_subject.subscribe(None, None, self.__handle_app_close)
             self.stream = IngressStream(self.identifier, self.target, self.incoming_app_data, close_subject)
         else:
-            self.reply_subject = rx.subjects.Subject()
+            self.reply_subject = rx.subject.Subject()
             self.stream = EgressStream(self.identifier, self.target, self.__handle_app_data, self.__handle_app_close, self.reply_subject)
 
 
@@ -271,7 +271,7 @@ class Session:
 
     def __handle_app_data(self, stream):
         # Create a send notify subject
-        subject = rx.subjects.Subject()
+        subject = rx.subject.Subject()
 
         # Create a segment tracker
         tracker = SegmentTracker(subject)

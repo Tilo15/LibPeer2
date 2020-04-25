@@ -37,7 +37,7 @@ class STP:
         self.__instance.incoming_payload.subscribe(self.__handle_packet)
         self.__notification_queue = queue.Queue()
 
-        self.incoming_stream = rx.subjects.Subject()
+        self.incoming_stream = rx.subject.Subject()
 
         threading.Thread(name="Stream Transmittion Protocol network thread for instance: {}".format(self.__instance.reference), target=self.__run).start()
         threading.Thread(name="Stream Transmittion Protocol notification thread for instance: {}".format(self.__instance.reference), target=self.__notify).start()

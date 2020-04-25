@@ -14,7 +14,7 @@ class Query:
         self.max_replies = max_replies
         self.hops = hops
         self.return_path = return_path
-        self.answer = rx.subjects.Subject()
+        self.answer = rx.subject.Subject()
 
 
     def serialise(self, stream):

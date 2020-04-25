@@ -38,7 +38,6 @@ class PeerInfo:
 
         # Return the object
         info = peer_info._build(stream, data_length)
-        print(info)
         return info
 
     
