@@ -141,6 +141,8 @@ class AIP:
         if(query.hops > MAX_QUERY_HOPS):
             return
 
+        query.return_path.append(self.__instance.reference)
+
         # Function to handle new streams for this query
         def on_stream_open(stream: EgressStream):
             # Tell the instance that the data that follows is a query
@@ -318,6 +320,8 @@ class AIP:
             # Complete!
             return
 
+        print(answer.path)
+
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
             print("Forwarded answer")
@@ -358,11 +362,15 @@ class AIP:
                 # Yes, create some instance information
                 instance = InstanceInformation(self.__instance.reference, self.__peer_info)
 
+                print("I'm in that group")
+
                 # Send the instance information in the answer
                 answer = Answer(instance.serialise(), query.return_path, query.identifier)
 
                 # Send the answer
                 self.__send_answer(answer)
+
+            print("Forwarded group query")
 
             # This is a query for a group, forward on to default group
             self.__send_query(query, self.__default_group)
@@ -381,9 +389,12 @@ class AIP:
                         # Yes, create instance information
                         instance = InstanceInformation(app.instance, self.__peer_info)
 
+                        print("I'm running that application!")
+
                         # Send the instance information in the answer
                         self.__send_answer(Answer(instance.serialise(), query.return_path, query.identifier))
 
+                print("Forwarded application query")
                 # Forward on to the group
                 self.__send_query(query, self.__query_groups[namespace])
 
