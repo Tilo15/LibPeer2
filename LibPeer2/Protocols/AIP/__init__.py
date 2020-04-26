@@ -141,8 +141,6 @@ class AIP:
         if(query.hops > MAX_QUERY_HOPS):
             return
 
-        print("Send query", query.return_path)
-
         # Function to handle new streams for this query
         def on_stream_open(stream: EgressStream):
             # Tell the instance that the data that follows is a query
@@ -320,8 +318,6 @@ class AIP:
             # Complete!
             return
 
-        print("Handle answer", answer.path)
-
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
             print("Forwarded answer")
@@ -347,8 +343,6 @@ class AIP:
         # Append the originator of the stream to the query reply path
         query.return_path.append(stream.origin)
 
-        print(query, query.return_path)
-
         # Increment the query hops
         query.hops += 1
 
@@ -372,7 +366,7 @@ class AIP:
                 # Send the answer
                 self.__send_answer(answer)
 
-            print("Forwarded group query", query, query.return_path)
+            print("Forwarded group query")
 
             # This is a query for a group, forward on to default group
             self.__send_query(query, self.__default_group)
