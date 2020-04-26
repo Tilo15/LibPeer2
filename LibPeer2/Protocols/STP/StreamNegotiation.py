@@ -18,3 +18,6 @@ class StreamNegotiation:
         self.ping = 120
         self.ingress = ingress
         self.notify = rx.subject.Subject()
+
+        self.request_repeater = None
+        self.negotiate_repeater = None

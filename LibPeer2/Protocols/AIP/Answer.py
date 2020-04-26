@@ -22,7 +22,7 @@ class Answer:
 
         # Serialise the return path
         for reference in self.path:
-            stream.write(reference.serialise())
+            stream.write(reference.serialise().read())
 
         # Write the answer data
         stream.write(self.data)

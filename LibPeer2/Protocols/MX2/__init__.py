@@ -11,6 +11,7 @@ from cachetools import TTLCache
 from typing import Dict
 from typing import Tuple
 from typing import List
+from threading import Thread
 
 import uuid
 import time
@@ -74,7 +75,8 @@ class MX2:
                 frame = Frame(destination, instance.reference, BytesIO(MX2.PACKET_INQUIRE + instance.application_namespace.encode("utf-8")))
 
                 # Send using the network and peer info
-                network.send(frame.serialise(instance.signing_key), peer)
+                Thread(name="MX2 Inquiry", target=self.__tolerant_inquire, args=(network, frame, peer, instance)).start()
+
 
     """Returns peer info on the specified instance"""
     def get_peer_info(self, instance: InstanceReference) -> PeerInfo:
@@ -93,6 +95,15 @@ class MX2:
             return self.__pings[target] * 2.0
 
         return 120.0
+
+
+    def __tolerant_inquire(self, network: Network, frame: Frame, peer: PeerInfo, instance: Instance):
+        for i in range(24):
+            network.send(frame.serialise(instance.signing_key), peer)
+            time.sleep(5)
+            # Stop inquiring if we have received a reply
+            if(frame.destination in self.__remote_instance_mapping):
+                return
 
 
     def __send_packet(self, instance: Instance, destination: InstanceReference, payload):
