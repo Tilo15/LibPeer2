@@ -51,7 +51,6 @@ class Frame:
         number = stream.read(len(Frame.MAGIC_NUMBER))
         if(number != Frame.MAGIC_NUMBER):
             # Raise an error
-            print(number)
             raise IOError("Stream did not start with frame magic number.")
 
         # Read the destination

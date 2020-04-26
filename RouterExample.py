@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     # net3 = conduit2.get_interface(False, 0, 0)
     # net3.bring_up()
-    # app3 = AipExample.AipExample(net3)
+    # app3 = AppExample.AppExample([net3])
 
     
 #

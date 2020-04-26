@@ -49,16 +49,16 @@ class Session:
         
         self.reconstruction = {}
         self.next_expected_sequence_number = 0
-        self.incoming_app_data = rx.subjects.Subject()
+        self.incoming_app_data = rx.subject.Subject()
 
         self.reply_subject = None
 
         if(ingress):
-            close_subject = rx.subjects.Subject()
+            close_subject = rx.subject.Subject()
             close_subject.subscribe(None, None, self.__handle_app_close)
             self.stream = IngressStream(self.identifier, self.target, self.incoming_app_data, close_subject)
         else:
-            self.reply_subject = rx.subjects.Subject()
+            self.reply_subject = rx.subject.Subject()
             self.stream = EgressStream(self.identifier, self.target, self.__handle_app_data, self.__handle_app_close, self.reply_subject)
 
 
@@ -84,7 +84,7 @@ class Session:
             if(segment.sequence_number not in self.in_flight):
                 # We must have resent redundantly
                 self.redundant_resends += 1
-                # print("REDUNDANT RESEND #{}".format(self.redundant_resends))
+                #print("REDUNDANT RESEND #{}".format(self.redundant_resends))
                 return
 
             # We have an acknowledgement segment, remove payload segment from in-flight
@@ -246,7 +246,7 @@ class Session:
             self.adjustment_delta = 0
 
         # TODO remove
-        # print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
+        #print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
 
 
     def __enqueue_segments(self):
@@ -271,7 +271,7 @@ class Session:
 
     def __handle_app_data(self, stream):
         # Create a send notify subject
-        subject = rx.subjects.Subject()
+        subject = rx.subject.Subject()
 
         # Create a segment tracker
         tracker = SegmentTracker(subject)

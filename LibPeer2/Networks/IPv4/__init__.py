@@ -24,6 +24,10 @@ class IPv4(Network):
     NETWORK_IDENTIFIER = b"IPv4"
 
     def __init__(self, address, port):
+        test_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        test_sock.bind((address, port))
+        test_sock.close()
+
         self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__mcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.__mcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

@@ -2,19 +2,19 @@ from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 
 from typing import Set
 
-import rx
+import rx.subject
 
 class InstanceManager:
     
     def __init__(self, application_namespace: str):
         self.namespace = application_namespace
-        self.new_peer = rx.subjects.Subject()
-        self.new_stream = rx.subjects.Subject()
+        self.new_peer = rx.subject.Subject()
+        self.new_stream = rx.subject.Subject()
 
-    def establish_stream(self, peer: InstanceReference, *, in_reply_to = None) -> rx.subjects.Subject:
+    def establish_stream(self, peer: InstanceReference, *, in_reply_to = None) -> rx.subject.Subject:
         raise NotImplementedError()
 
-    def find_resource_peers(self, resource: bytes) -> rx.subjects.Subject:
+    def find_resource_peers(self, resource: bytes) -> rx.subject.Subject:
         raise NotImplementedError()
 
     @property
