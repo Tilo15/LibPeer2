@@ -312,7 +312,7 @@ class AIP:
             info = InstanceInformation.deserialise(answer.data)
 
             # Notify the query's subject listeners
-            print("Received answer for query {}.".format(query))
+            #print("Received answer for query {}.".format(query))
             query.answer.on_next(info)
 
             # Complete!
@@ -320,7 +320,7 @@ class AIP:
 
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
-            print("Forwarded answer")
+            #print("Forwarded answer")
             # Put it back on its path
             self.__send_answer(answer)
 
@@ -358,7 +358,7 @@ class AIP:
                 # Yes, create some instance information
                 instance = InstanceInformation(self.__instance.reference, self.__peer_info)
 
-                print("I'm in that group")
+                #print("I'm in that group")
 
                 # Send the instance information in the answer
                 answer = Answer(instance.serialise(), query.return_path.copy(), query.identifier)
@@ -366,7 +366,7 @@ class AIP:
                 # Send the answer
                 self.__send_answer(answer)
 
-            print("Forwarded group query")
+            #print("Forwarded group query")
 
             # This is a query for a group, forward on to default group
             self.__send_query(query, self.__default_group)
@@ -385,12 +385,12 @@ class AIP:
                         # Yes, create instance information
                         instance = InstanceInformation(app.instance, self.__peer_info)
 
-                        print("I'm running that application!")
+                        #print("I'm running that application!")
 
                         # Send the instance information in the answer
                         self.__send_answer(Answer(instance.serialise(), query.return_path.copy(), query.identifier))
 
-                print("Forwarded application query")
+                #print("Forwarded application query")
                 # Forward on to the group
                 self.__send_query(query, self.__query_groups[namespace])
 
@@ -411,13 +411,13 @@ class AIP:
                         # Yes, create instance information
                         instance = InstanceInformation(app.instance, self.__peer_info)
 
-                        print("I have that resource!")
+                        #print("I have that resource!")
 
                         # Send the instance information in the answer
                         self.__send_answer(Answer(instance.serialise(), query.return_path.copy(), query.identifier))
 
                 # Forward on to the group
-                print("Forwarded resource query")
+                #print("Forwarded resource query")
                 self.__send_query(query, self.__query_groups[namespace])
 
 
