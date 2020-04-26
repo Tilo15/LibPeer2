@@ -1,6 +1,6 @@
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 
-from rx.subjects import Subject
+from rx.subject import Subject
 from threading import Timer
 
 import uuid

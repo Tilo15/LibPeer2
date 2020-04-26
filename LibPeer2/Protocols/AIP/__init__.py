@@ -256,7 +256,7 @@ class AIP:
     def __rx_advertisement(self, advertisement: Advertisement):
         # Send an inquiry
         self.__muxer.inquire(self.__instance, advertisement.instance_reference, [advertisement.peer_info])
-        print(advertisement.peer_info)
+        # print(advertisement.peer_info)
 
 
     def __rx_greeting(self, greeting: InstanceReference):
@@ -356,7 +356,7 @@ class AIP:
             # Complete!
             return
 
-        print(answer.path)
+        # print(answer.path)
 
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
@@ -484,14 +484,19 @@ class AIP:
                                 # Yes, Get some instance informaiton ready
                                 instance = InstanceInformation(self.__instance.reference, self.__peer_info, self.__instance.reference)
 
+                                print("They are, sending answer")
+
                                 # Send the instance information in the answer
                                 answer = Answer(instance.serialise(), answer_path, query.identifier)
 
                                 # Send the answer
                                 self.__send_answer(answer)
 
+                        print("Asking peer if they are associated with an instance")
                         # Ask the target
                         self.__request_association(aip_reference, app_reference).subscribe(callback)
+
+            print("Forwarding routing query")
 
             # This is a query for a route, forward on to default group
             self.__send_query(query, self.__default_group)
@@ -668,7 +673,7 @@ class AIP:
 
     def __request_association(self, aip_instance: InstanceReference, app_instance: InstanceReference):
         # Create the subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Handler for the reply
         def on_reply(stream: IngressStream):

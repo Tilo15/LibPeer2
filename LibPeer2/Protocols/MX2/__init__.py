@@ -15,7 +15,7 @@ from typing import List
 from typing import Set
 from typing import Callable
 from threading import Timer
-from rx.subjects import Subject
+from rx.subject import Subject
 from threading import Thread
 
 import uuid
