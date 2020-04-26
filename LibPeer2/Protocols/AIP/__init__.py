@@ -141,7 +141,7 @@ class AIP:
         if(query.hops > MAX_QUERY_HOPS):
             return
 
-        query.return_path.append(self.__instance.reference)
+        print("Send query", query.return_path)
 
         # Function to handle new streams for this query
         def on_stream_open(stream: EgressStream):
@@ -320,7 +320,7 @@ class AIP:
             # Complete!
             return
 
-        print(answer.path)
+        print("Handle answer", answer.path)
 
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
@@ -347,6 +347,8 @@ class AIP:
         # Append the originator of the stream to the query reply path
         query.return_path.append(stream.origin)
 
+        print(query, query.return_path)
+
         # Increment the query hops
         query.hops += 1
 
@@ -365,12 +367,12 @@ class AIP:
                 print("I'm in that group")
 
                 # Send the instance information in the answer
-                answer = Answer(instance.serialise(), query.return_path, query.identifier)
+                answer = Answer(instance.serialise(), query.return_path.copy(), query.identifier)
 
                 # Send the answer
                 self.__send_answer(answer)
 
-            print("Forwarded group query")
+            print("Forwarded group query", query, query.return_path)
 
             # This is a query for a group, forward on to default group
             self.__send_query(query, self.__default_group)
@@ -392,7 +394,7 @@ class AIP:
                         print("I'm running that application!")
 
                         # Send the instance information in the answer
-                        self.__send_answer(Answer(instance.serialise(), query.return_path, query.identifier))
+                        self.__send_answer(Answer(instance.serialise(), query.return_path.copy(), query.identifier))
 
                 print("Forwarded application query")
                 # Forward on to the group
@@ -418,7 +420,7 @@ class AIP:
                         print("I have that resource!")
 
                         # Send the instance information in the answer
-                        self.__send_answer(Answer(instance.serialise(), query.return_path, query.identifier))
+                        self.__send_answer(Answer(instance.serialise(), query.return_path.copy(), query.identifier))
 
                 # Forward on to the group
                 print("Forwarded resource query")
