@@ -8,15 +8,24 @@ import AppExample
 if __name__ == "__main__":
     conduit1 = Conduit(False)
     conduit2 = Conduit(False)
+    conduit3 = Conduit(False)
 
-    config = RouterConfiguration(
-        [
+    config1 = RouterConfiguration(
+        networks = [
             conduit1.get_interface(False, 0, 0.0),
             conduit2.get_interface(False, 0, 0.0)
         ]
     )
 
-    router = BasicRouter(config)
+    config2 = RouterConfiguration(
+        networks = [
+            conduit2.get_interface(False, 0, 0.0),
+            conduit3.get_interface(False, 0, 0.0)
+        ]
+    )
+
+    router1 = BasicRouter(config1)
+    #router2 = BasicRouter(config2)
 
     net1 = conduit1.get_interface(False, 0, 0.0)
     net1.bring_up()

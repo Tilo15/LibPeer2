@@ -461,7 +461,7 @@ class AIP:
                 if(aip_reference in self.__reachable_peers and aip_reference not in self.__routed_peers):
                     # Yes, does it fit our routing rules?
                     if(self.will_route(stream.origin, aip_reference)):
-                        # Yes, get ready to ask the target AIP peer if it is associated with the app peer
+                        # Yes, get ready to reply to the query
                         def callback(is_associated):      
                             # Is the aip peer assciated?
                             if(is_associated):
@@ -473,9 +473,15 @@ class AIP:
 
                                 # Send the answer
                                 self.__send_answer(answer)
+                        
+                        # Is the app reference the same as the aip reference?
+                        if(app_reference == aip_reference):
+                            # Yes, send reply immediately
+                            callback(True)
 
-                        # Ask the target
-                        self.__request_association(aip_reference, app_reference).subscribe(callback)
+                        else:
+                            # Ask the target AIP instance if it is associated with the target app instance
+                            self.__request_association(aip_reference, app_reference).subscribe(callback)
 
             # This is a query for a route, forward on to default group
             self.__send_query(query, self.__default_group)

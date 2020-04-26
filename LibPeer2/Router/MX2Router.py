@@ -14,12 +14,13 @@ import sys
 
 class MX2Router:
 
-    def __init__(self):
+    def __init__(self, name="ROUTER"):
         self.routes: Dict[InstanceReference, Route] = {}
         self.will_route: Callable[[InstanceReference, InstanceReference], bool] = self.__will_route
         self.local_destinations: Set[InstanceReference] = set()
         self.muxer = MX2()
         self.muxer._interceptor = self.__handle_receiption
+        self.name = name
 
     def register_network(self, network: Network):
         self.muxer.register_network(network)
@@ -45,27 +46,32 @@ class MX2Router:
         # Read the destination
         destination = InstanceReference.deserialise(receiption.stream)
 
+        # Read the origin
+        origin = InstanceReference.deserialise(receiption.stream)
+
+        # Do we have the origin saved as a route?
+        if(origin not in self.routes):
+            # No, add it
+            self.routes[origin] = Route(origin, receiption.peer_info, receiption.network)
+
         # Is this a local destination?
         if(destination in self.local_destinations):
             # Yes, let the muxer handle it
             # TODO XXX we should not assume this is a seekable stream
-            #print("{}\t->\tROUTER\t\t\t(delivered)".format(str(InstanceReference.deserialise(receiption.stream)).split('"')[1][:6]))
+            print("{}\t->\t{}\t\t\t(delivered)".format(str(origin).split('"')[1][:6], self.name))
             receiption.stream.seek(0, 0)
             return receiption
 
-        # Read the origin
-        origin = InstanceReference.deserialise(receiption.stream)
-
         # Is the destination a known route?
         if(destination not in self.routes):
-            sys.stdout.write("{}\t->\tROUTER\t->\t{}\t".format(str(origin).split('"')[1][:6], str(destination).split('"')[1][:6]))
+            sys.stdout.write("{}\t->\t{}\t->\t{}\t".format(str(origin).split('"')[1][:6], self.name, str(destination).split('"')[1][:6]))
             print("(no route)")
             # No, drop
             return None
 
         # Will we route this?
         if(not self.will_route(origin, destination, False)):
-            sys.stdout.write("{}\t->\tROUTER\t->\t{}\t".format(str(origin).split('"')[1][:6], str(destination).split('"')[1][:6]))
+            sys.stdout.write("{}\t->\t{}\t->\t{}\t".format(str(origin).split('"')[1][:6], self.name, str(destination).split('"')[1][:6]))
             print("(refused)")
             # No, drop
             return None
@@ -78,8 +84,8 @@ class MX2Router:
         # Get the route to the destination
         route = self.routes[destination]
 
-        #sys.stdout.write("{}\t->\tROUTER\t->\t{}\t".format(str(origin).split('"')[1][:6], str(destination).split('"')[1][:6]))
-        #print("(forwarded)")
+        sys.stdout.write("{}\t->\t{}\t->\t{}\t".format(str(origin).split('"')[1][:6], self.name, str(destination).split('"')[1][:6]))
+        print("(forwarded)")
 
         # TODO XXX we should not assume this is a seekable stream
         receiption.stream.seek(0, 0)

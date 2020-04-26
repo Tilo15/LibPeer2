@@ -21,6 +21,7 @@ class BasicRouter:
         self.aip = AIP(self.frame_router.muxer)
         self.aip._aip_instance_touch.subscribe(self.__new_aip)
         self.aip._aip_instance_association.subscribe(self.__new_association)
+        self.frame_router.name = str(self.aip.instance_reference).split('"')[1][:6]
 
         self.frame_router.local_destinations.add(self.aip.instance_reference)
         self.aip.can_route = True
