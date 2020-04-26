@@ -12,7 +12,7 @@ class ApplicationInformation:
         self.namespace = namespace
         self.resources = resources
 
-        self.discovery = rx.subjects.Subject()
+        self.discovery = rx.subject.Subject()
 
     @property
     def namespace_bytes(self):

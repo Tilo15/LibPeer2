@@ -81,14 +81,14 @@ class AIP:
         self.__handled_query_ids: Set[bytes] = set()
         self.__peer_info: Set[PeerInfo] = set()
 
-        self.__new_group_peer: Dict[bytes, rx.subjects.Subject] = {}
+        self.__new_group_peer: Dict[bytes, rx.subject.Subject] = {}
         self.__ready = False
-        self.__on_peer_greet: Dict[InstanceReference, rx.subjects.Subject] = {}
+        self.__on_peer_greet: Dict[InstanceReference, rx.subject.Subject] = {}
 
-        self._aip_instance_touch = rx.subjects.Subject()
-        self._aip_instance_association = rx.subjects.Subject()
+        self._aip_instance_touch = rx.subject.Subject()
+        self._aip_instance_association = rx.subject.Subject()
         
-        self.ready = rx.subjects.Subject()
+        self.ready = rx.subject.Subject()
 
     @property
     def instance_reference(self):
@@ -173,6 +173,8 @@ class AIP:
         if(query.hops > MAX_QUERY_HOPS):
             return
 
+        query.return_path.append(self.__instance.reference)
+
         # Function to handle new streams for this query
         def on_stream_open(stream: EgressStream):
             # Tell the instance that the data that follows is a query
@@ -225,7 +227,7 @@ class AIP:
     def __join_query_group(self, group: bytes):
         # Create the query group
         self.__query_groups[group] = QueryGroup()
-        self.__new_group_peer[group] = rx.subjects.Subject()
+        self.__new_group_peer[group] = rx.subject.Subject()
 
         # Construct a query asking for peers in the group
         query = Query(QUERY_GROUP + group)
@@ -233,7 +235,7 @@ class AIP:
         # Create handler for query answers
         def on_query_answer(answer: InstanceInformation):
             # Create a subject so we know when this peer has been greeted
-            self.__on_peer_greet[answer.instance_reference] = rx.subjects.Subject()
+            self.__on_peer_greet[answer.instance_reference] = rx.subject.Subject()
 
             # When is has been greeted, notify the group subject
             self.__on_peer_greet[answer.instance_reference].subscribe(self.__new_group_peer[group].on_next)
@@ -348,13 +350,17 @@ class AIP:
             info = InstanceInformation.deserialise(answer.data)
 
             # Notify the query's subject listeners
+            print("Received answer for query {}.".format(query))
             query.answer.on_next(info)
 
             # Complete!
             return
 
+        print(answer.path)
+
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
+            print("Forwarded answer")
             # Put it back on its path
             self.__send_answer(answer)
 
@@ -393,11 +399,15 @@ class AIP:
                 # Yes, create some instance information
                 instance = InstanceInformation(self.__instance.reference, self.__peer_info, self.__instance.reference)
 
+                print("I'm in that group")
+
                 # Send the instance information in the answer
                 answer = Answer(instance.serialise(), answer_path, query.identifier)
 
                 # Send the answer
                 self.__send_answer(answer)
+
+            print("Forwarded group query")
 
             # This is a query for a group, forward on to default group
             self.__send_query(query, self.__default_group)
@@ -416,9 +426,12 @@ class AIP:
                         # Yes, create instance information
                         instance = InstanceInformation(app.instance, self.__peer_info, self.__instance.reference)
 
+                        print("I'm running that application!")
+
                         # Send the instance information in the answer
                         self.__send_answer(Answer(instance.serialise(), answer_path, query.identifier))
 
+                print("Forwarded application query")
                 # Forward on to the group
                 self.__send_query(query, self.__query_groups[namespace])
 
@@ -439,10 +452,13 @@ class AIP:
                         # Yes, create instance information
                         instance = InstanceInformation(app.instance, self.__peer_info, self.__instance.reference)
 
+                        print("I have that resource!")
+
                         # Send the instance information in the answer
                         self.__send_answer(Answer(instance.serialise(), answer_path, query.identifier))
 
                 # Forward on to the group
+                print("Forwarded resource query")
                 self.__send_query(query, self.__query_groups[namespace])
 
         elif(query_type == QUERY_INSTANCE_ROUTE):
@@ -565,7 +581,7 @@ class AIP:
 
     def __send_request(self, request, instance: InstanceReference):
         # Create the reply subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Create a handler
         def on_stream_open(stream: EgressStream):
@@ -584,7 +600,7 @@ class AIP:
 
     def __request_capabilities(self, instance: InstanceReference):
         # Create the subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Handler for the reply
         def on_reply(stream: IngressStream):
@@ -609,7 +625,7 @@ class AIP:
             raise IOError("It is against protocol to respond to address requests from AIP peers connected via a router")
 
         # Create the subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Handler for the reply
         def on_reply(stream: IngressStream):
@@ -627,7 +643,7 @@ class AIP:
 
     def __request_peers(self, instance: InstanceReference):
         # Create the subject
-        reply = rx.subjects.Subject()
+        reply = rx.subject.Subject()
 
         # Handler for the reply
         def on_reply(stream: IngressStream):

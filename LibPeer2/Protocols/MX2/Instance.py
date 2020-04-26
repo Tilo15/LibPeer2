@@ -19,13 +19,14 @@ class Instance:
         self.signing_key = SigningKey.generate()
 
         # Create subject for incoming payloads
-        self.incoming_payload = rx.subjects.Subject()
+        self.incoming_payload = rx.subject.Subject()
 
         # Create a set of reachable instances
         self.reachable_peers: Set[InstanceReference] = set()
 
         # Create subject for newly reachable instances
-        self.incoming_greeting = rx.subjects.Subject()
+        self.incoming_greeting = rx.subject.Subject()
+
     
     @property
     def reference(self) -> InstanceReference:

@@ -12,6 +12,7 @@ from LibPeer2.Protocols.STP.Messages.SegmentMessage import SegmentMessage
 from LibPeer2.Protocols.STP.Stream.Session import Session
 from LibPeer2.Protocols.STP.Stream.EgressStream import EgressStream
 from LibPeer2.Protocols.STP.Stream.IngressStream import IngressStream
+from LibPeer2.Protocols.STP.Repeater import Repeater
 
 from cachetools import TTLCache
 from io import BytesIO
@@ -37,7 +38,7 @@ class STP:
         self.__instance.incoming_payload.subscribe(self.__handle_packet)
         self.__notification_queue = queue.Queue()
 
-        self.incoming_stream = rx.subjects.Subject()
+        self.incoming_stream = rx.subject.Subject()
 
         threading.Thread(name="Stream Transmittion Protocol network thread for instance: {}".format(self.__instance.reference), target=self.__run).start()
         threading.Thread(name="Stream Transmittion Protocol notification thread for instance: {}".format(self.__instance.reference), target=self.__notify).start()
@@ -55,8 +56,11 @@ class STP:
         # Create the session request
         session_request = RequestSession(negotiation.session_id, in_reply_to, features)
 
-        # Send the request
-        self.__send_packet(target, session_request.serialise())
+        # Send the request in a repeater
+        repeater = Repeater(10, 12, lambda: self.__send_packet(target, session_request.serialise()), "STP Stream Request")
+
+        # Save agains the negotiation
+        negotiation.request_repeater = repeater
 
         # Return the negotiation subject
         return negotiation.notify
@@ -106,6 +110,10 @@ class STP:
 
         # What type of message do we have?
         if(isinstance(message, RequestSession)):
+            # Skip if we have already handled this request
+            if(message.session_id in self.__negotiations):
+                return
+
             # A peer wants to initiate a session with us
             # Create a negotiation object (consider it negotiated as we are about to send back our negotiation)
             negotiation = StreamNegotiation(message.session_id, message.in_reply_to, message.feature_codes, StreamNegotiation.STATE_NEGOTIATED, packet.origin, True)
@@ -122,8 +130,12 @@ class STP:
             # Construct a reply
             reply = NegotiateSession(negotiation.session_id, feature_codes, message.timing)
 
-            # Send the reply
-            self.__send_packet(negotiation.remote_instance, reply.serialise())
+            # Repeatedly send the negotiation
+            repeater = Repeater(10, 12, lambda: self.__send_packet(negotiation.remote_instance, reply.serialise()), "STP Stream Negotiation")
+
+            # Save the repeater against the negotiation
+            negotiation.negotiate_repeater = repeater
+            
 
         elif(isinstance(message, NegotiateSession)):
             # We are getting a negotiation reply from a peer
@@ -135,13 +147,9 @@ class STP:
             # Get the negotiation
             negotiation: StreamNegotiation = self.__negotiations[message.session_id]
 
-            # Make sure the negotiation is in the right state
-            if(negotiation.state != StreamNegotiation.STATE_REQUESTED):
-                # TODO send cleanup
-                return
-
-            # Update the negotiaiton state
-            negotiation.state = StreamNegotiation.STATE_ACCEPTED
+            # Cancel the request repeater
+            if(negotiation.request_repeater != None):
+                negotiation.request_repeater.cancel()
 
             # Set the ping value
             negotiation.ping = time.time() - message.reply_timing
@@ -162,11 +170,15 @@ class STP:
             # Send the reply
             self.__send_packet(negotiation.remote_instance, reply.serialise())
 
+            # Make sure the negotiation is in the right state
+            if(negotiation.state != StreamNegotiation.STATE_REQUESTED):
+                return
+
+            # Update the negotiaiton state
+            negotiation.state = StreamNegotiation.STATE_ACCEPTED
+
             # Setup the session
             self.__setup_session(negotiation)
-
-            # Cleanup the negotiation
-            del self.__negotiations[message.session_id]
 
 
         elif(isinstance(message, BeginSession)):
@@ -178,6 +190,10 @@ class STP:
 
             # Get the negotiation
             negotiation: StreamNegotiation = self.__negotiations[message.session_id]
+            
+            # Cancel the negotiate repeater
+            if(negotiation.negotiate_repeater != None):
+                negotiation.negotiate_repeater.cancel()
 
             # Make sure the negotiation is in the right state
             if(negotiation.state != StreamNegotiation.STATE_NEGOTIATED):
@@ -201,6 +217,11 @@ class STP:
             if(message.session_id not in self.__open_sessions):
                 # Skip
                 return
+
+            # Is there a valid negotiation still open?
+            if(message.session_id in self.__negotiations):
+                # Cleanup the negotiation
+                del self.__negotiations[message.session_id]
 
             # Get the session
             session: Session = self.__open_sessions[message.session_id]
