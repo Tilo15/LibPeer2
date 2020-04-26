@@ -173,8 +173,6 @@ class AIP:
         if(query.hops > MAX_QUERY_HOPS):
             return
 
-        query.return_path.append(self.__instance.reference)
-
         # Function to handle new streams for this query
         def on_stream_open(stream: EgressStream):
             # Tell the instance that the data that follows is a query
@@ -356,8 +354,6 @@ class AIP:
             # Complete!
             return
 
-        # print(answer.path)
-
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
             print("Forwarded answer")
@@ -382,7 +378,7 @@ class AIP:
 
         # Append the originator of the stream to the query reply path
         query.return_path.append(stream.origin)
-        answer_path = query.return_path
+        answer_path = query.return_path.copy()
 
         # Increment the query hops
         query.hops += 1
