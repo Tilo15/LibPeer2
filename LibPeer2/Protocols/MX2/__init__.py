@@ -2,6 +2,7 @@ from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 from LibPeer2.Protocols.MX2.Instance import Instance
 from LibPeer2.Protocols.MX2.Frame import Frame
 from LibPeer2.Protocols.MX2.Packet import Packet
+from LibPeer2.Protocols.MX2.PathInfo import PathInfo
 from LibPeer2.Networks.Receiption import Receiption
 from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Networks import Network
@@ -26,7 +27,7 @@ class MX2:
     def __init__(self):
         self.__networks: Dict[bytes, Network] = {}
         self.__instances: Dict[InstanceReference, Instance] = {}
-        self.__remote_instance_mapping: Dict[InstanceReference, Tuple[Network, PeerInfo]] = {}
+        self.__remote_instance_mapping: Dict[InstanceReference, Tuple[Network, PeerInfo, PathInfo]] = {}
         self.__inquire_timer = TTLCache(512, 120)
         self.__pings: Dict[InstanceReference, float] = {}
 
@@ -72,11 +73,15 @@ class MX2:
             # Loop over the networks that match the type
             for network in self.__networks[peer.NETWORK_TYPE]:
                 # Create a frame containing an inquire packet
-                frame = Frame(destination, instance.reference, BytesIO(MX2.PACKET_INQUIRE + instance.application_namespace.encode("utf-8")))
+                frame = Frame(destination, instance.reference, PathInfo.empty(), BytesIO(MX2.PACKET_INQUIRE + instance.application_namespace.encode("utf-8")))
 
                 # Send using the network and peer info
                 Thread(name="MX2 Inquiry", target=self.__tolerant_inquire, args=(network, frame, peer, instance)).start()
 
+
+    # TODO next: Add Inquire via paths:
+    # takes a list of an object containing a possible path to an instance and the
+    # peer info of the first hop
 
     """Returns peer info on the specified instance"""
     def get_peer_info(self, instance: InstanceReference) -> PeerInfo:
@@ -116,11 +121,11 @@ class MX2:
             # Throw an error
             raise IOError("No known way to reach the specified instance")
 
-        # Create a frame
-        frame = Frame(destination, instance.reference, payload)
+        # Get network, peer, and path info
+        network, peer_info, path_info = self.__remote_instance_mapping[destination]
 
-        # Get network and peer info
-        network, peer_info = self.__remote_instance_mapping[destination]
+        # Create a frame
+        frame = Frame(destination, instance.reference, path_info, payload)
 
         # Send frame over network
         network.send(frame.serialise(instance.signing_key), peer_info)
@@ -144,7 +149,7 @@ class MX2:
             # Does the application namespace match the instance's?
             if(instance.application_namespace == application_namespace):
                 # Yes! Save this instance's information locally for use later
-                self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info)
+                self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info, frame.via.return_path())
 
                 # Reply with a greeting (and a throwaway UUID so we aren't just encrypting one byte)
                 self.__send_packet(instance, frame.origin, BytesIO(MX2.PACKET_GREET + uuid.uuid4().bytes))
@@ -154,7 +159,7 @@ class MX2:
             # Have we received one from this instance before?
             if(frame.origin not in self.__remote_instance_mapping):
                 # No, this is the first (therefore, least latent) method of talking to this instance
-                self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info)
+                self.__remote_instance_mapping[frame.origin] = (receiption.network, receiption.peer_info, frame.via.return_path())
 
                 # Get ping
                 ping = 120.0

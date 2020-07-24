@@ -1,19 +1,17 @@
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
 from LibPeer2.Protocols.MX2.Instance import Instance
+from LibPeer2.Protocols.MX2.PathInfo import PathInfo
 from nacl.public import SealedBox
 from nacl.public import PrivateKey
 from nacl.signing import SigningKey
 from io import BytesIO
 from typing import Dict
-from typing import List
-
-import struct
 
 class Frame:
 
     MAGIC_NUMBER = b"MX2"
 
-    def __init__(self, destination: InstanceReference, origin: InstanceReference, payload, via: List[InstanceReference] = []):
+    def __init__(self, destination: InstanceReference, origin: InstanceReference, via: PathInfo, payload):
         # Save all properties
         self.destination = destination
         self.origin = origin
@@ -33,18 +31,14 @@ class Frame:
         # Write the origin key
         buffer.write(self.origin.serialise().read())
 
-        # Write cound of intermediate hops
-        buffer.write(struct.pack("!B", len(self.via)))
-
-        # Write the intermediate hop keys
-        for repeater in self.via:
-            buffer.write(repeater.serialise().read())
-
-        # Sign the payload
-        signed = signing_key.sign(self.payload.read())
+        # Write the via field
+        buffer.write(self.via.serialise().read())
 
         # Create a box to send the signed data in
         box = SealedBox(self.destination.public_key)
+
+        # Sign the payload
+        signed = signing_key.sign(self.payload.read())
 
         # Encrypt and write the data to the buffer
         buffer.write(box.encrypt(signed))
@@ -75,11 +69,8 @@ class Frame:
             # Raise an error
             raise IOError("Received frame does not belong to any current instances")
 
-        # Read number of intermediate repeaters
-        repeater_count = struct.unpack("!B", stream.read(1))[0]
-
-        # Get list of repeaters
-        repeaters = [InstanceReference.deserialise(stream) for i in range(repeater_count)]
+        # Read the via field
+        via = PathInfo.deserialise(stream)
 
         # The remainder of the stream is the encrypted payload
         encrypted = stream.read()
@@ -94,7 +85,7 @@ class Frame:
         payload = BytesIO(origin.verification_key.verify(signed))
 
         # Create the object
-        return Frame(destination, origin, payload, repeaters), instances[destination]
+        return Frame(destination, origin, via, payload), instances[destination]
 
 
 

@@ -221,6 +221,9 @@ class RPP:
             # Read response
             response = PathResponse.deserialise(stream)
 
+            # TODO: Save PeerInfo of other repeaters we may be able to communicate with
+            # as the client asking for this path will try combinations
+
             # Get flags for respondant repeater
             flags = self.__get_instance_flags(instance, stream.origin)
 
