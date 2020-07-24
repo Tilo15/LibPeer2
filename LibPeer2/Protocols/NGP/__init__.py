@@ -1,3 +1,4 @@
+from LibPeer2.Networks import Network
 from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Protocols.MX2 import MX2
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
@@ -8,8 +9,12 @@ from LibPeer2.Protocols.STP import STP
 from LibPeer2.Protocols.STP.Stream.IngressStream import IngressStream
 from LibPeer2.Protocols.STP.Stream.EgressStream import EgressStream
 from LibPeer2.Protocols.NGP.Announcement import Announcement
+from LibPeer2.Protocols.NGP.PathQuery import PathQuery
+from LibPeer2.Protocols.NGP.PathResponse import PathResponse
+from LibPeer2.Protocols.NGP import PathNode
 
 from rx.subject import Subject
+from rx import operators
 from typing import Set
 from typing import Dict
 
@@ -20,7 +25,7 @@ REPEATER_RESOURCE = b"REPEATER" + b"\x00"*24
 
 COMMAND_ANNOUNCE = b"\x01"
 COMMAND_JOIN = b"\x02"
-QUERY_PATH = b"\x03"
+COMMAND_FIND_PATH = b"\x03"
 
 
 class NGP:
@@ -32,6 +37,7 @@ class NGP:
 
         self.is_repeater = is_repeater
         self.instance_info: Dict[InstanceReference, PeerInfo] = {}
+        self.instance_network: Dict[InstanceReference, Network] = {}
         self.__announced_instances = Set[InstanceReference]()
 
         # Create instance 
@@ -47,6 +53,28 @@ class NGP:
 
         # Keep a set of reachable NGP repeater peers
         self.__repeaters = Set[InstanceReference] = set()
+
+
+    def add_instance(self, instance: InstanceReference):
+        # Add to our set
+        self.__announced_instances.add(instance)
+
+        # Announce to connected repeaters
+        self.__send_command(COMMAND_ANNOUNCE, Announcement([instance]))
+
+
+    def find_path(self, instance: InstanceReference):
+        # Construct a query
+        query = PathQuery(instance, 15, [])
+
+        # Create a response from a stream
+        def read_response(stream: IngressStream):
+            response = PathResponse.deserialise(stream)
+            stream.close()
+            return response
+
+        # Send the query and map reply to PathResponse
+        return self.__send_command(COMMAND_FIND_PATH, query.serialise().read()).pipe(operators.take(1), operators.map(read_response))
 
 
     def __aip_ready(self, state):       
@@ -83,16 +111,13 @@ class NGP:
         # No, announce our instances
         self.__send_command_to(COMMAND_ANNOUNCE, Announcement(self.__announced_instances), instance)
 
-
-    def add_instance(self, instance: InstanceReference):
-        # Add to our set
-        self.__announced_instances.add(instance)
-
-        # Announce to connected repeaters
-        self.__send_command(COMMAND_ANNOUNCE, Announcement([instance]))
+        # Are we a repeater?
+        if(self.is_repeater):
+            # Send join (empty)
+            self.__send_command_to(COMMAND_JOIN, b"")
 
     
-    def __send_command(self, command_type: bytes, data: bytes, expect_reply: bool) -> Subject:
+    def __send_command(self, command_type: bytes, data: bytes, expect_reply: bool = False) -> Subject:
         # If we expect replies to this command, create a subject
         reply_subject = None
         if(expect_reply):
@@ -112,7 +137,7 @@ class NGP:
         return reply_subject
 
 
-    def __send_command_to(self, command_type: bytes, data: bytes, instance: InstanceReference, expect_reply: bool) -> Subject:
+    def __send_command_to(self, command_type: bytes, data: bytes, instance: InstanceReference, expect_reply: bool = False) -> Subject:
         # Returns when the command has been sent, or with the reply if expctant
         subject = Subject()
             
@@ -141,7 +166,82 @@ class NGP:
         return subject
         
 
-    
-        
-    
-        
+    def __new_stream(self, stream: IngressStream):
+        # New command, what is it?
+        command_type = stream.read(1)
+
+        # Announce
+        if(command_type == COMMAND_ANNOUNCE):
+            # Read announcement
+            announcement = Announcement.deserialise(stream)
+
+            # Get peer info and network
+            info = self.__muxer.get_peer_info(stream.origin)
+            network = self.__muxer.get_peer_network(stream.origin)
+
+            # Update records
+            for instance in announcement.instances:
+                self.instance_info[instance] = info
+                self.instance_network[instance] = network
+
+        # Join
+        elif(command_type == COMMAND_JOIN):
+            # Add as repeater peer
+            self.__repeaters.add(stream.origin)
+
+        # Find path
+        elif(command_type == COMMAND_FIND_PATH):
+            # Read the query
+            query = PathQuery.deserialise(stream)
+
+            # Is it an instance directly connected to us?
+            if(query.target in self.instance_info):
+                # Yes, get the flags
+                flags = self.__get_instance_flags(stream.origin, query.target)
+
+                self.__query_respond(stream.origin, stream.id, PathResponse([PathNode.PathNode(query.target)], flags))
+
+            elif(query.ttl > 0):
+                # Instance is not directly connected, forward query if still alive
+                self.__forward_query(stream.origin, stream.id)
+
+
+    def __forward_query(self, instance: InstanceReference, reply_to, query: PathQuery):
+        # Handle responses
+        def on_responded(stream: IngressStream):
+            # Read response
+            response = PathResponse.deserialise(stream)
+
+            # Get flags for respondant repeater
+            flags = self.__get_instance_flags(instance, stream.origin)
+
+            # Prepend hop to respondant repeater
+            response.nodes.insert(0, PathNode.PathNode(stream.origin, flags))
+
+        # Forward the query to all my repeater friends
+        self.__send_command(COMMAND_FIND_PATH, query.serialise().read(), True).pipe(operators.take(1)).subscribe(on_responded)
+
+
+    def __get_instance_flags(self, origin: InstanceReference, target: InstanceReference):
+        #set up flags
+        flags = PathNode.FLAGS_NONE
+
+        # Is it on the same network as the caller?
+        if(self.__muxer.get_peer_network(stream.origin) != self.__muxer.get_peer_network(self.instance_network[query.target])):
+            # No, add bridge flag
+            flags = flags | PathNode.FLAGS_BRIDGE
+
+        return flags
+
+
+    def __query_respond(self, instance: InstanceReference, reply_to, response: PathResponse):
+        # Handler for stream setup
+        def on_stream(stream: EgressStream):
+            # Send the response
+            stream.write(response.serialise().read())
+
+            # Close
+            stream.close()
+
+        # Set up connection with instance
+        self.__transport.initialise_stream(instance, in_reply_to=reply_to).subscribe(on_stream)

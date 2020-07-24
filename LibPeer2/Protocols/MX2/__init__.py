@@ -82,6 +82,10 @@ class MX2:
     def get_peer_info(self, instance: InstanceReference) -> PeerInfo:
         return self.__remote_instance_mapping[instance][1]
 
+    """Returns the network that the specified instance is connected via"""
+    def get_peer_network(self, instance: InstanceReference) -> Network:
+        return self.__remote_instance_mapping[instance][0]
+
 
     """Send data to the specified destination"""
     def send(self, instance: Instance, destination: InstanceReference, data):
