@@ -14,7 +14,7 @@ class Query:
         self.max_replies = max_replies
         self.hops = hops
         self.return_path = return_path
-        self.answer = rx.subjects.Subject()
+        self.answer = rx.subject.Subject()
 
 
     def serialise(self, stream):
@@ -27,7 +27,7 @@ class Query:
 
         # Serialise the return path
         for reference in self.return_path:
-            stream.write(reference.serialise())
+            stream.write(reference.serialise().read())
 
         # Write the query data
         stream.write(self.data)

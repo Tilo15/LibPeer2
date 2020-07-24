@@ -10,8 +10,8 @@ from LibPeer2.Networks.IPv4 import IPv4
 
 from typing import Set
 from typing import Dict
-from rx.subjects import ReplaySubject
-from rx.subjects import Subject
+from rx.subject import ReplaySubject
+from rx.subject import Subject
 
 
 class DefaultInstanceManager(InstanceManager):
