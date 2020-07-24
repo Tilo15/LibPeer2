@@ -8,10 +8,10 @@ from LibPeer2.Protocols.AIP.InstanceInformation import InstanceInformation
 from LibPeer2.Protocols.STP import STP
 from LibPeer2.Protocols.STP.Stream.IngressStream import IngressStream
 from LibPeer2.Protocols.STP.Stream.EgressStream import EgressStream
-from LibPeer2.Protocols.NGP.Announcement import Announcement
-from LibPeer2.Protocols.NGP.PathQuery import PathQuery
-from LibPeer2.Protocols.NGP.PathResponse import PathResponse
-from LibPeer2.Protocols.NGP import PathNode
+from LibPeer2.Protocols.RPP.Announcement import Announcement
+from LibPeer2.Protocols.RPP.PathQuery import PathQuery
+from LibPeer2.Protocols.RPP.PathResponse import PathResponse
+from LibPeer2.Protocols.RPP import PathNode
 
 from rx.subject import Subject
 from rx import operators
@@ -20,15 +20,16 @@ from typing import Dict
 
 import struct
 
-NGP_NAMESPACE = b"NGP"
+RPP_NAMESPACE = b"RPP"
 REPEATER_RESOURCE = b"REPEATER" + b"\x00"*24
 
 COMMAND_ANNOUNCE = b"\x01"
 COMMAND_JOIN = b"\x02"
 COMMAND_FIND_PATH = b"\x03"
 
+# Repeater Path Protocol
 
-class NGP:
+class RPP:
 
     def __init__(self, muxer: MX2, discoverer: AIP, is_repeater: bool = False):
         self.__muxer = muxer
@@ -41,7 +42,7 @@ class NGP:
         self.__announced_instances = Set[InstanceReference]()
 
         # Create instance 
-        self.__instance = self.__muxer.create_instance(NGP_NAMESPACE)
+        self.__instance = self.__muxer.create_instance(RPP_NAMESPACE)
 
         # Create application information
         self.__info = ApplicationInformation.from_instance(self.__instance)
@@ -51,7 +52,7 @@ class NGP:
         self.__instance.incoming_greeting.subscribe(self.__received_greeting)
         self.__transport.incoming_stream.subscribe(self.__new_stream)
 
-        # Keep a set of reachable NGP repeater peers
+        # Keep a set of reachable RPP repeater peers
         self.__repeaters = Set[InstanceReference] = set()
 
 
@@ -88,7 +89,7 @@ class NGP:
 
 
     def __new_aip_app_peer(self, instance):
-        # Query for NGP repeater instances
+        # Query for RPP repeater instances
         self.__discoverer.find_application_resource(self.__info, REPEATER_RESOURCE).subscribe(self.__found_instance)
 
 
@@ -117,7 +118,7 @@ class NGP:
             self.__send_command_to(COMMAND_JOIN, b"")
 
     
-    def __send_command(self, command_type: bytes, data: bytes, expect_reply: bool = False) -> Subject:
+    def __send_command(self, command_type: bytes, data: bytes, expect_reply: bool = False, blacklist: Set[InstanceReference] = set()) -> Subject:
         # If we expect replies to this command, create a subject
         reply_subject = None
         if(expect_reply):
@@ -125,6 +126,11 @@ class NGP:
 
         # Loop over each repeater
         for repeater in self.__repeaters:
+            # Is this a blacklisted repeater?
+            if(repeater in blacklist):
+                # Yes, skip
+                continue
+
             # Send command
             subject = self.__send_command_to(command_type, data, repeater, expect_reply)
 
@@ -207,6 +213,9 @@ class NGP:
 
 
     def __forward_query(self, instance: InstanceReference, reply_to, query: PathQuery):
+        # Add out own instance reference to the blacklist so it can't route through us again
+        query.blacklist.append(self.__instance.reference)
+
         # Handle responses
         def on_responded(stream: IngressStream):
             # Read response
@@ -219,7 +228,7 @@ class NGP:
             response.nodes.insert(0, PathNode.PathNode(stream.origin, flags))
 
         # Forward the query to all my repeater friends
-        self.__send_command(COMMAND_FIND_PATH, query.serialise().read(), True).pipe(operators.take(1)).subscribe(on_responded)
+        self.__send_command(COMMAND_FIND_PATH, query.serialise().read(), True, set(query.blacklist)).pipe(operators.take(1)).subscribe(on_responded)
 
 
     def __get_instance_flags(self, origin: InstanceReference, target: InstanceReference):

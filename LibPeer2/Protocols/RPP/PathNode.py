@@ -1,4 +1,5 @@
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
+from LibPeer2.Networks.PeerInfo import PeerInfo
 
 from typing import List
 from io import BytesIO
@@ -10,9 +11,10 @@ FLAGS_BRIDGE = 1
 
 class PathNode:
 
-    def __init__(self, instance: InstanceReference, flags: int):
+    def __init__(self, instance: InstanceReference, flags: int, info: PeerInfo):
         self.instance = instance
         self.flags = flags
+        self.peer_info = info
 
 
     def has_flag(self, flag: int):

@@ -1,4 +1,4 @@
-from LibPeer2.Protocols.NGP.PathNode import PathNode
+from LibPeer2.Protocols.RPP.PathNode import PathNode
 
 from typing import List
 from io import BytesIO
