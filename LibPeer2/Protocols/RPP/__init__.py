@@ -141,7 +141,11 @@ class RPP:
         # Are we a repeater?
         if(self.is_repeater):
             # Send join (empty)
-            self.__send_command_to(COMMAND_JOIN, b"")
+            self.__send_command_to(COMMAND_JOIN, b"", instance)
+
+            # Save instance info for flag lookups
+            self.instance_info[instance] = self.__muxer.get_peer_info(instance)
+            self.instance_network[instance] = self.__muxer.get_peer_network(instance)
 
     
     def __set_ready(self):
@@ -242,8 +246,8 @@ class RPP:
             self.__repeaters.add(stream.origin)
 
             # Save instance info for flag lookups
-            self.instance_info[stream.origin] = info
-            self.instance_network[stream.origin] = network
+            self.instance_info[stream.origin] = self.__muxer.get_peer_info(stream.origin)
+            self.instance_network[stream.origin] = self.__muxer.get_peer_network(stream.origin)
 
         # Find path
         elif(command_type == COMMAND_FIND_PATH):
