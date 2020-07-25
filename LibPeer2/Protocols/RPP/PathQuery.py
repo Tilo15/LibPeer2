@@ -23,8 +23,8 @@ class PathQuery:
         # Write the TTL and number of blacklist instances
         buffer.write(struct.pack("!BB", self.ttl, len(self.blacklist)))
 
-        # Write instances
-        for instance in self.instances:
+        # Write instances for blacklist
+        for instance in self.blacklist:
             buffer.write(instance.serialise().read())
 
         # Return

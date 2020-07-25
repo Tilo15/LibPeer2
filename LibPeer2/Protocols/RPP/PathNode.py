@@ -29,7 +29,7 @@ class PathNode:
         buffer.write(self.instance.serialise().read())
 
         # Write flags
-        buffer.write(struct.pack("!B", self.flags)
+        buffer.write(struct.pack("!B", self.flags))
 
         # Return
         buffer.seek(0, 0)

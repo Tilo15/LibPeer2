@@ -2,6 +2,8 @@ from LibPeer2.Networks import Network
 from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Protocols.MX2 import MX2
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
+from LibPeer2.Protocols.MX2.PathInfo import PathInfo
+from LibPeer2.Protocols.MX2.PathStrategy import PathStrategy
 from LibPeer2.Protocols.AIP import AIP
 from LibPeer2.Protocols.AIP.ApplicationInformation import ApplicationInformation
 from LibPeer2.Protocols.AIP.InstanceInformation import InstanceInformation
@@ -20,7 +22,7 @@ from typing import Dict
 
 import struct
 
-RPP_NAMESPACE = b"RPP"
+RPP_NAMESPACE = "RPP"
 REPEATER_RESOURCE = b"INTERCONNECTED-NETWORK-REPEATERS"
 
 COMMAND_ANNOUNCE = b"\x01"
@@ -34,51 +36,29 @@ class RPP:
     def __init__(self, muxer: MX2, discoverer: AIP, is_repeater: bool = False):
         self.__muxer = muxer
         self.__discoverer = discoverer
-        self.__transport = STP(self.__muxer, self.__instance)
 
         self.is_repeater = is_repeater
         self.instance_info: Dict[InstanceReference, PeerInfo] = {}
         self.instance_network: Dict[InstanceReference, Network] = {}
-        self.__announced_instances = Set[InstanceReference]()
+        self.__announced_instances: Set[InstanceReference] = set()
 
         # Create instance 
         self.__instance = self.__muxer.create_instance(RPP_NAMESPACE)
+
+        # Create transport
+        self.__transport = STP(self.__muxer, self.__instance)
 
         # Create application information
         self.__info = ApplicationInformation.from_instance(self.__instance)
 
         # Subscribe to muxer and discoverer events
-        self.__discoverer.ready.subscribe(self.__aip_ready)
+        # self.__discoverer.ready.subscribe(self.__aip_ready)
         self.__instance.incoming_greeting.subscribe(self.__received_greeting)
         self.__transport.incoming_stream.subscribe(self.__new_stream)
 
-        # Keep a set of reachable RPP repeater peers
-        self.__repeaters = Set[InstanceReference] = set()
+        self.__ready = False
+        self.ready = Subject()
 
-
-    def add_instance(self, instance: InstanceReference):
-        # Add to our set
-        self.__announced_instances.add(instance)
-
-        # Announce to connected repeaters
-        self.__send_command(COMMAND_ANNOUNCE, Announcement([instance]))
-
-
-    def find_path(self, instance: InstanceReference):
-        # Construct a query
-        query = PathQuery(instance, 15, [])
-
-        # Create a response from a stream
-        def read_response(stream: IngressStream):
-            response = PathResponse.deserialise(stream)
-            stream.close()
-            return response
-
-        # Send the query and map reply to PathResponse
-        return self.__send_command(COMMAND_FIND_PATH, query.serialise().read()).pipe(operators.take(1), operators.map(read_response))
-
-
-    def __aip_ready(self, state):       
         # Are we a repeater?
         if(self.is_repeater):
             # Yes, tag ourself with that resource
@@ -87,35 +67,83 @@ class RPP:
         # Add the application to the discoverer
         self.__discoverer.add_application(self.__info).subscribe(self.__new_aip_app_peer)
 
+        # Keep a set of reachable RPP repeater peers
+        self.__repeaters: Set[InstanceReference] = set()
+
+        self._ready = False
+        self.ready = Subject()
+
+
+    @property
+    def instance_reference(self):
+        return self.__instance.reference
+
+
+    def add_instance(self, instance: InstanceReference):
+        # Add to our set
+        self.__announced_instances.add(instance)
+
+        # Announce to connected repeaters
+        self.__send_command(COMMAND_ANNOUNCE, Announcement([instance]).serialise().read())
+
+
+    def find_path(self, instance: InstanceReference):
+        # Construct a query
+        query = PathQuery(instance, 15, [])
+
+        # Create a Path Info from a stream
+        def read_response(stream: IngressStream):
+            response = PathResponse.deserialise(stream)
+            stream.close()
+
+            # TODO generate many possible strategies
+            return [PathStrategy(PathInfo([x.instance for x in response.nodes], response.nodes[0].peer_info))]
+
+        # Send the query and map reply to PathResponse
+        return self.__send_command(COMMAND_FIND_PATH, query.serialise().read(), True).pipe(operators.take(1), operators.map(read_response))
+
 
     def __new_aip_app_peer(self, instance):
+        print("RPP AIP NEW")
         # Query for RPP repeater instances
-        self.__discoverer.find_application_resource(self.__info, REPEATER_RESOURCE).subscribe(self.__found_instance)
+        self.__discoverer.find_application_resource(self.__info, REPEATER_RESOURCE).answer.subscribe(self.__found_instance)
 
 
     def __found_instance(self, instance_info: InstanceInformation):
         # Is this peer already reachable?
-        if(instance_info.instance_reference in self.__reachable_peers):
+        if(instance_info.instance_reference in self.__repeaters):
             # Don't harras it
             return
 
+        print("RPP FOUND INSTANCE")
         # Inquire about the peer
         self.__muxer.inquire(self.__instance, instance_info.instance_reference, instance_info.connection_methods)
     
 
     def __received_greeting(self, instance: InstanceReference):
         # Do we already know about this peer?
-        if(instance in self.__reachable_peers):
+        print("RPP GREETED")
+        if(instance in self.__repeaters):
             # Nothing to do
             return
 
         # No, announce our instances
-        self.__send_command_to(COMMAND_ANNOUNCE, Announcement(self.__announced_instances), instance)
+        self.__send_command_to(COMMAND_ANNOUNCE, Announcement(self.__announced_instances).serialise().read(), instance).subscribe(on_completed=self.__set_ready)
+
+        # Save as repeater
+        self.__repeaters.add(instance)
 
         # Are we a repeater?
         if(self.is_repeater):
             # Send join (empty)
             self.__send_command_to(COMMAND_JOIN, b"")
+
+    
+    def __set_ready(self):
+        if(self._ready):
+            return
+
+        self.ready.on_completed()
 
     
     def __send_command(self, command_type: bytes, data: bytes, expect_reply: bool = False, blacklist: Set[InstanceReference] = set()) -> Subject:
@@ -124,8 +152,11 @@ class RPP:
         if(expect_reply):
             reply_subject = Subject()
 
+        print("RPP SEND-ALL")
+
         # Loop over each repeater
         for repeater in self.__repeaters:
+            print("RPP SEND")
             # Is this a blacklisted repeater?
             if(repeater in blacklist):
                 # Yes, skip
@@ -138,6 +169,8 @@ class RPP:
             if(expect_reply):
                 # Yes, connect to subject
                 subject.subscribe(reply_subject.on_next)
+
+            print("RPP SENT")
 
         # Return reply subject
         return reply_subject
@@ -175,6 +208,8 @@ class RPP:
     def __new_stream(self, stream: IngressStream):
         # New command, what is it?
         command_type = stream.read(1)
+
+        print(command_type)
 
         # Announce
         if(command_type == COMMAND_ANNOUNCE):

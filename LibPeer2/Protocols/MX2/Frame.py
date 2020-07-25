@@ -7,6 +7,8 @@ from nacl.signing import SigningKey
 from io import BytesIO
 from typing import Dict
 
+import traceback
+
 class Frame:
 
     MAGIC_NUMBER = b"MX2"
