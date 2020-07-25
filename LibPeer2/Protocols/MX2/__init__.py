@@ -126,7 +126,7 @@ class MX2:
                 frame = Frame(destination, instance.reference, strategy.path, BytesIO(MX2.PACKET_INQUIRE + inquiry.id + instance.application_namespace.encode("utf-8")))
 
                 # Send using the network and peer info
-                Thread(name="MX2 Inquiry", target=self.__tolerant_inquire, args=(network, frame, peer, instance)).start()
+                Thread(name="MX2 Inquiry", target=self.__tolerant_inquire, args=(network, frame, strategy.first_hop, instance)).start()
                 packets += 1
 
         Log.debug("Sent inquiry via path, resulting in {} packet/s".format(packets))

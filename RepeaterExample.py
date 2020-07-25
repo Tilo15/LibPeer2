@@ -18,12 +18,15 @@ if __name__ == "__main__":
     repeater1.register_network(r1net2)
     #router2 = BasicRouter(config2)
 
-    print("Waiting 10 seconds before starting apps")
-    time.sleep(10)
+    print("Waiting 5 seconds before starting first app")
+    time.sleep(5)
 
     net1 = conduit1.get_interface(False, 0, 0.0)
     net1.bring_up()
     app1 = AppExample.AppExample([net1])
+
+    print("Waiting 20 seconds before starting second app")
+    time.sleep(20)
 
     net2 = conduit2.get_interface(False, 0, 0.0)
     net2.bring_up()

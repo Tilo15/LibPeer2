@@ -49,7 +49,9 @@ class DefaultInstanceManager(InstanceManager):
         self.__transport = STP(self.__muxer, self.__instance)
         self.__path_finder = RPP(self.__muxer, self.__discoverer)
 
-        (self.__path_finder if use_repeaters else self.__discoverer).ready.subscribe(on_completed=self.__ready)
+        self.__path_finder.add_instance(self.__instance.reference)
+
+        # (self.__path_finder if use_repeaters else self.__discoverer).ready.subscribe(on_completed=self.__ready)
         self.__instance.incoming_greeting.subscribe(self.__received_greeting)
         self.__transport.incoming_stream.subscribe(self.__new_stream)
 
@@ -57,7 +59,7 @@ class DefaultInstanceManager(InstanceManager):
             self.__discoverer.add_network(network)
 
         self.__info = ApplicationInformation.from_instance(self.__instance)
-        # self.__ready()
+        self.__ready()
 
 
     def establish_stream(self, peer: InstanceReference, *, in_reply_to = None) -> Subject:
@@ -161,7 +163,6 @@ class DefaultInstanceManager(InstanceManager):
 
     
     def __greeting_timeout(self, target: InstanceReference):
-        print(self.__instance.reachable_peers)
         # Have we already found this peer?
         if(target in self.__instance.reachable_peers or not self.use_repeaters):
             return
@@ -175,7 +176,7 @@ class DefaultInstanceManager(InstanceManager):
                 return
 
             # We have a path, inquire
-            self.__muxer.inquire_via_paths(paths)
+            self.__muxer.inquire_via_paths(self.__instance, target, paths)
 
         # Subscribe to answers
         query.subscribe(handle_route)

@@ -31,6 +31,9 @@ class PathNode:
         # Write flags
         buffer.write(struct.pack("!B", self.flags))
 
+        # Write peer info
+        buffer.write(self.peer_info.serialise())
+
         # Return
         buffer.seek(0, 0)
         return buffer
@@ -43,5 +46,8 @@ class PathNode:
         # Read flags
         flags = struct.unpack("!B", stream.read(1))[0]
 
+        # Read peer info
+        info = PeerInfo.deserialise(stream)
+
         # Return query
-        return PathQuery(target, flags)
+        return PathNode(instance, flags, info)

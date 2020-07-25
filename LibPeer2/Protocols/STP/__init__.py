@@ -13,6 +13,7 @@ from LibPeer2.Protocols.STP.Stream.Session import Session
 from LibPeer2.Protocols.STP.Stream.EgressStream import EgressStream
 from LibPeer2.Protocols.STP.Stream.IngressStream import IngressStream
 from LibPeer2.Protocols.STP.Repeater import Repeater
+from LibPeer2.Debug import Log
 
 from cachetools import TTLCache
 from io import BytesIO
@@ -95,7 +96,7 @@ class STP:
                 self.__notification_queue.get()()
             except Exception as e:
                 print(traceback.format_exc())
-                print("Exception executing task in STP notification queue: {}".format(e))
+                Log.error("Exception executing task in STP notification queue: {}".format(e))
 
 
 

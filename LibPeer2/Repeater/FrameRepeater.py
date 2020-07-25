@@ -29,10 +29,6 @@ class FrameRepeater(MX2):
         # Create RPP instance
         self.__relay_path_protocol = RPP(self, self.__discoverer, True)
 
-        print("Repeater: {}".format(self.__short_name(self.__relay_path_protocol.instance_reference)))
-        print("Repeater associated: {}".format(", ".join((self.__short_name(x) for x in self._MX2__instances.keys()))))
-        print()
-
 
     # Override
     def register_network(self, network: Network):
@@ -65,11 +61,12 @@ class FrameRepeater(MX2):
             next_instance = frame.next_hop(self.__relay_path_protocol.instance_reference)
 
             # Get network and peer info of instance
-            network, info = self.__node_info[next_instance]
+            network = self.__relay_path_protocol.instance_network[next_instance]
+            info = self.__relay_path_protocol.instance_info[next_instance]
 
 
             # TODO Remove Print
-            print("{}\t->\t{}\t->\t{}".format(self.__short_name(frame.previous_hop(self.__relay_path_protocol.instance_reference)), self.__short_name(self.__relay_path_protocol.instance_reference), self.__short_name(frame.next_hop(self.__relay_path_protocol.instance_reference))))
+            #print("{}\t->\t{}\t->\t{}".format(self.__short_name(frame.previous_hop(self.__relay_path_protocol.instance_reference)), self.__short_name(self.__relay_path_protocol.instance_reference), self.__short_name(frame.next_hop(self.__relay_path_protocol.instance_reference))))
 
             # Send
             network.send(frame.to_stream(), info)

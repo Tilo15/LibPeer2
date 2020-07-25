@@ -213,14 +213,20 @@ class AIP:
                 # Create a subject so we know when this peer has been greeted
                 self.__on_peer_greet[answer.instance_reference] = rx.subject.Subject()
 
+                # Add to group
+                self.__query_groups[group].add_peer(answer.instance_reference)
+
+                # Are we already connected to this peer?
+                if(answer.instance_reference in self.__reachable_peers):
+                    # No need to greet, already connected
+                    self.__new_group_peer[group].on_next(answer.instance_reference)
+                    return
+
                 # When is has been greeted, notify the group subject
                 self.__on_peer_greet[answer.instance_reference].subscribe(self.__new_group_peer[group].on_next)
 
                 # Inquire
                 self.__muxer.inquire(self.__instance, answer.instance_reference, answer.connection_methods)
-
-                # Add to group
-                self.__query_groups[group].add_peer(answer.instance_reference)
 
             # Subscribe to the answer
             query.answer.subscribe(on_query_answer)
@@ -380,7 +386,7 @@ class AIP:
             # Are we in this group?
             if(group in self.__query_groups):
                 # Yes create a function for sending the answer
-                def send_reply():
+                def send_reply(isDefered = True):
                     # Create some instance information
                     instance = InstanceInformation(self.__instance.reference, self.__peer_info)
 
@@ -389,17 +395,20 @@ class AIP:
 
                     # Send the answer
                     self.__send_answer(answer)
+
+                    if(isDefered):
+                        Log.debug("Sent defered group reply")
                 
                 # Do we have peer info to send yet?
                 if(len(self.__peer_info) > 0):
                     # Yes, do it
-                    Log.debug("Got query for group '{}'".format(group.decode("utf-8")))
-                    send_reply()
+                    Log.debug("Responding to query for group '{}'".format(group.decode("utf-8")))
+                    send_reply(False)
 
                 else:
                     # No, wait for peer info
                     self.__new_peer_info.pipe(rx.operators.take(1)).subscribe(on_completed=send_reply)
-                    Log.debug("Got query for group '{}' but defering response until we have peer info to send".format(group.decode("utf-8")))
+                    Log.debug("Responding to query for group '{}' but defering response until we have peer info to send".format(group.decode("utf-8")))
 
             # This is a query for a group, forward on to default group
             self.__send_query(query, self.__default_group)

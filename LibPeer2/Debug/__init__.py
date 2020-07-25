@@ -7,7 +7,7 @@ import subprocess
 
 class Log:
 	enabled = True
-	level = 0
+	level = 1
 	output = sys.stdout
 	levels = ["DEBUG", "MESSAGE", "INFO", "WARNING", "ERROR", "CRITICAL", "MELTDOWN"]
 	

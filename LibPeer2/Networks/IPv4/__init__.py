@@ -123,7 +123,7 @@ class IPv4(Network):
                     self.incoming_advertisment.on_next(advertisement)
 
             except Exception as e:
-                print("Exception on incoming packet: {}".format(e))
+                Log.error("Exception on incoming packet: {}".format(e))
 
 
     def __mcast_listen(self):

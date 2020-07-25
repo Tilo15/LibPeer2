@@ -7,6 +7,7 @@ from LibPeer2.Protocols.STP.Stream.Segments.Acknowledgement import Acknowledgeme
 from LibPeer2.Protocols.STP.Stream.Segments.Control import Control
 from LibPeer2.Protocols.STP.Stream.SegmentTracker import SegmentTracker
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
+from LibPeer2.Debug import Log
 
 from threading import Lock
 from io import BytesIO
@@ -84,7 +85,7 @@ class Session:
             if(segment.sequence_number not in self.in_flight):
                 # We must have resent redundantly
                 self.redundant_resends += 1
-                #print("REDUNDANT RESEND #{}".format(self.redundant_resends))
+                Log.debug("Redundant resend of segment")
                 return
 
             # We have an acknowledgement segment, remove payload segment from in-flight
@@ -245,9 +246,6 @@ class Session:
             # Update the delta too
             self.adjustment_delta = 0
 
-        # TODO remove
-        #print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
-
 
     def __enqueue_segments(self):
         # If we have segments to queue, and room in our window, queue them
@@ -263,7 +261,6 @@ class Session:
         for segment in list(self.in_flight.values()):
             # Is the segment timing value less than the max time?
             if(segment.sequence_number in self.in_flight and segment.timing != None and segment.timing < maxtime):
-                #print("RESEND: {}".format(self.worst_ping * (self.redundant_resends + 1) * self.window_size))
                 # Resend it
                 segment.timing = time.time()
                 self.outgoing_segment_queue.put(segment)

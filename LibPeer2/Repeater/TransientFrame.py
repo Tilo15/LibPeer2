@@ -34,7 +34,7 @@ class TransientFrame:
         position = self.via.repeaters.index(after)
 
         # Is there a next element?
-        if(len(self.via.repeaters) <= position + 1):
+        if(position + 1 >= len(self.via.repeaters)):
             # No, next hop is destination
             return self.target
 
@@ -61,9 +61,9 @@ class TransientFrame:
         position = self.via.repeaters.index(before)
 
         # Is there a previous element?
-        if(lposition - 1 < 0):
+        if(position - 1 < 0):
             # No, next hop is source
-            return self.target
+            return self.origin
 
         # Return it
         return self.via.repeaters[position - 1]

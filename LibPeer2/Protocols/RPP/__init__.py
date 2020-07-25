@@ -14,6 +14,7 @@ from LibPeer2.Protocols.RPP.Announcement import Announcement
 from LibPeer2.Protocols.RPP.PathQuery import PathQuery
 from LibPeer2.Protocols.RPP.PathResponse import PathResponse
 from LibPeer2.Protocols.RPP import PathNode
+from LibPeer2.Debug import Log
 
 from rx.subject import Subject
 from rx import operators
@@ -96,15 +97,21 @@ class RPP:
             response = PathResponse.deserialise(stream)
             stream.close()
 
+            # Prepend hop to respondant repeater
+            # TODO these flags may need to be looked at some more or the 
+            # PathNode object redesigned
+            # HACK we should probably just get some sort of full representation
+            # from the RPP repeater we ask the path from, but can't at the moment as we require peer info
+            response.nodes.insert(0, PathNode.PathNode(stream.origin, PathNode.FLAGS_NONE, self.__muxer.get_peer_info(stream.origin)))
+
             # TODO generate many possible strategies
-            return [PathStrategy(PathInfo([x.instance for x in response.nodes], response.nodes[0].peer_info))]
+            return [PathStrategy(PathInfo([x.instance for x in response.nodes]), response.nodes[0].peer_info),]
 
         # Send the query and map reply to PathResponse
         return self.__send_command(COMMAND_FIND_PATH, query.serialise().read(), True).pipe(operators.take(1), operators.map(read_response))
 
 
     def __new_aip_app_peer(self, instance):
-        print("RPP AIP NEW")
         # Query for RPP repeater instances
         self.__discoverer.find_application_resource(self.__info, REPEATER_RESOURCE).answer.subscribe(self.__found_instance)
 
@@ -115,14 +122,12 @@ class RPP:
             # Don't harras it
             return
 
-        print("RPP FOUND INSTANCE")
         # Inquire about the peer
         self.__muxer.inquire(self.__instance, instance_info.instance_reference, instance_info.connection_methods)
     
 
     def __received_greeting(self, instance: InstanceReference):
         # Do we already know about this peer?
-        print("RPP GREETED")
         if(instance in self.__repeaters):
             # Nothing to do
             return
@@ -152,11 +157,10 @@ class RPP:
         if(expect_reply):
             reply_subject = Subject()
 
-        print("RPP SEND-ALL")
+        count = 0
 
         # Loop over each repeater
         for repeater in self.__repeaters:
-            print("RPP SEND")
             # Is this a blacklisted repeater?
             if(repeater in blacklist):
                 # Yes, skip
@@ -165,12 +169,14 @@ class RPP:
             # Send command
             subject = self.__send_command_to(command_type, data, repeater, expect_reply)
 
+            count += 1
+
             # Do we expect a reply?
             if(expect_reply):
                 # Yes, connect to subject
                 subject.subscribe(reply_subject.on_next)
 
-            print("RPP SENT")
+        Log.debug("Broadcasted a command to {} repeater/s".format(count))
 
         # Return reply subject
         return reply_subject
@@ -185,7 +191,7 @@ class RPP:
             # Do we expect a reply?
             if(expect_reply):
                 # Subscribe to reply
-                stream.reply.subsribe(subject.on_next)
+                stream.reply.subscribe(subject.on_next)
 
             # Send command type and command
             stream.write(command_type + data)
@@ -209,8 +215,6 @@ class RPP:
         # New command, what is it?
         command_type = stream.read(1)
 
-        print(command_type)
-
         # Announce
         if(command_type == COMMAND_ANNOUNCE):
             # Read announcement
@@ -220,15 +224,26 @@ class RPP:
             info = self.__muxer.get_peer_info(stream.origin)
             network = self.__muxer.get_peer_network(stream.origin)
 
+            Log.debug("Peer announced itself with {} attached instance/s".format(len(announcement.instances)))
+
             # Update records
             for instance in announcement.instances:
                 self.instance_info[instance] = info
                 self.instance_network[instance] = network
 
+            # Also add info for the RPP peer
+            self.instance_info[stream.origin] = info
+            self.instance_network[stream.origin] = network
+
         # Join
         elif(command_type == COMMAND_JOIN):
+            Log.debug("Repeater peer joined")
             # Add as repeater peer
             self.__repeaters.add(stream.origin)
+
+            # Save instance info for flag lookups
+            self.instance_info[stream.origin] = info
+            self.instance_network[stream.origin] = network
 
         # Find path
         elif(command_type == COMMAND_FIND_PATH):
@@ -240,11 +255,14 @@ class RPP:
                 # Yes, get the flags
                 flags = self.__get_instance_flags(stream.origin, query.target)
 
-                self.__query_respond(stream.origin, stream.id, PathResponse([PathNode.PathNode(query.target)], flags))
+                Log.debug("Servicing query for path to an instance that is currently connected")
+
+                self.__query_respond(stream.origin, stream.id, PathResponse([]))
 
             elif(query.ttl > 0):
+                Log.debug("Forwarding query for path to instance")
                 # Instance is not directly connected, forward query if still alive
-                self.__forward_query(stream.origin, stream.id)
+                self.__forward_query(stream.origin, stream.id, query)
 
 
     def __forward_query(self, instance: InstanceReference, reply_to, query: PathQuery):
@@ -263,7 +281,7 @@ class RPP:
             flags = self.__get_instance_flags(instance, stream.origin)
 
             # Prepend hop to respondant repeater
-            response.nodes.insert(0, PathNode.PathNode(stream.origin, flags))
+            response.nodes.insert(0, PathNode.PathNode(stream.origin, flags, self.__muxer.get_peer_info(stream.origin)))
 
         # Forward the query to all my repeater friends
         self.__send_command(COMMAND_FIND_PATH, query.serialise().read(), True, set(query.blacklist)).pipe(operators.take(1)).subscribe(on_responded)
@@ -274,7 +292,8 @@ class RPP:
         flags = PathNode.FLAGS_NONE
 
         # Is it on the same network as the caller?
-        if(self.__muxer.get_peer_network(stream.origin) != self.__muxer.get_peer_network(self.instance_network[query.target])):
+        # TODO this may need to use self.instance_network instead of the muxer lookup
+        if(self.instance_network[origin] != self.instance_network[target]):
             # No, add bridge flag
             flags = flags | PathNode.FLAGS_BRIDGE
 

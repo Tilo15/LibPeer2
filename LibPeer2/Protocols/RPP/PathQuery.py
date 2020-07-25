@@ -37,7 +37,7 @@ class PathQuery:
         instance = InstanceReference.deserialise(stream)
 
         # Read TTL and number of instances
-        ttl, blacklist_count = struct.unpack("!BB", stream.read(1))
+        ttl, blacklist_count = struct.unpack("!BB", stream.read(2))
 
         # Return query
-        return PathQuery(target, ttl - 1, [InstanceReference.deserialise(stream) for x in range(count)])
+        return PathQuery(instance, ttl - 1, [InstanceReference.deserialise(stream) for x in range(blacklist_count)])
