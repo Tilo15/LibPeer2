@@ -216,6 +216,7 @@ class STP:
         elif(isinstance(message, SegmentMessage)):
             # Do we have a session open?
             if(message.session_id not in self.__open_sessions):
+                Log.debug("Received segment for non-open session")
                 # Skip
                 return
 
@@ -259,6 +260,11 @@ class STP:
             else:
                 # Otherwise notify the application normally
                 self.__notification_queue.put(lambda: self.incoming_stream.on_next(session.stream))
+
+
+    def __cleanup_session(self, session: Session):
+        # Remove from open sessions
+        del self.__open_sessions[session.identifier]
 
                 
 
