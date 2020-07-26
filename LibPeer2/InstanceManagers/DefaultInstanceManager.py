@@ -24,6 +24,7 @@ class DefaultInstanceManager(InstanceManager):
         self.__reachable_peers: Set[InstanceReference] = set()
         self.__resource_subjects: Dict[bytes, ReplaySubject] = {}
         self.__peer_subjects: Dict[InstanceReference, ReplaySubject] = {}
+        self.__has_aip_group_peers = ReplaySubject()
 
         if(len(networks) == 0):
             port = 5156
@@ -51,7 +52,6 @@ class DefaultInstanceManager(InstanceManager):
 
         self.__path_finder.add_instance(self.__instance.reference)
 
-        # (self.__path_finder if use_repeaters else self.__discoverer).ready.subscribe(on_completed=self.__ready)
         self.__instance.incoming_greeting.subscribe(self.__received_greeting)
         self.__transport.incoming_stream.subscribe(self.__new_stream)
 
@@ -59,7 +59,9 @@ class DefaultInstanceManager(InstanceManager):
             self.__discoverer.add_network(network)
 
         self.__info = ApplicationInformation.from_instance(self.__instance)
-        self.__ready()
+        
+        # Add the application to the discoverer
+        self.__discoverer.add_application(self.__info).subscribe(self.__new_aip_app_peer)
 
 
     def establish_stream(self, peer: InstanceReference, *, in_reply_to = None) -> Subject:
@@ -76,11 +78,16 @@ class DefaultInstanceManager(InstanceManager):
             # Create one
             self.__resource_subjects[resource] = ReplaySubject()
 
-        # Create a query for the resource
-        query = self.__discoverer.find_application_resource(self.__info, resource)
+        # Prepeare function to make the resource request
+        def find_peers(has_group_peers):
+            # Create a query for the resource
+            query = self.__discoverer.find_application_resource(self.__info, resource)
 
-        # Subscribe to the queries answer
-        query.answer.subscribe(lambda x: self.__found_resource_instance(x, resource))
+            # Subscribe to the queries answer
+            query.answer.subscribe(lambda x: self.__found_resource_instance(x, resource))
+
+        # When we are in a position to ask group peers, do it
+        self.__has_aip_group_peers.subscribe(find_peers)
 
         # Return the resource subject
         return self.__resource_subjects[resource]
@@ -90,15 +97,13 @@ class DefaultInstanceManager(InstanceManager):
     def resources(self) -> Set[bytes]:
         return self.__info.resources
 
-
-    def __ready(self):
-        # Add the application to the discoverer
-        self.__discoverer.add_application(self.__info).subscribe(self.__new_aip_app_peer)
-
     
     def __new_aip_app_peer(self, instance):
         # Query for application instances
         self.__discoverer.find_application_instance(self.__info).subscribe(self.__found_instance)
+
+        # We now have an AIP group peer
+        self.__has_aip_group_peers.on_next(True)
 
     
     def __found_instance(self, instance_info: InstanceInformation):
