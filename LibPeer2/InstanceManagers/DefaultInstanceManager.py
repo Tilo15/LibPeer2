@@ -13,6 +13,7 @@ from typing import Set
 from typing import Dict
 from rx.subject import ReplaySubject
 from rx.subject import Subject
+from rx.operators import take
 
 
 class DefaultInstanceManager(InstanceManager):
@@ -80,6 +81,7 @@ class DefaultInstanceManager(InstanceManager):
 
         # Prepeare function to make the resource request
         def find_peers(has_group_peers):
+            print("doing it")
             # Create a query for the resource
             query = self.__discoverer.find_application_resource(self.__info, resource)
 
@@ -87,7 +89,7 @@ class DefaultInstanceManager(InstanceManager):
             query.answer.subscribe(lambda x: self.__found_resource_instance(x, resource))
 
         # When we are in a position to ask group peers, do it
-        self.__has_aip_group_peers.subscribe(find_peers)
+        self.__has_aip_group_peers.pipe(take(1)).subscribe(find_peers)
 
         # Return the resource subject
         return self.__resource_subjects[resource]
