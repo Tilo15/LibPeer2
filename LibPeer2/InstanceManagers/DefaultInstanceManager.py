@@ -81,7 +81,6 @@ class DefaultInstanceManager(InstanceManager):
 
         # Prepeare function to make the resource request
         def find_peers(has_group_peers):
-            print("doing it")
             # Create a query for the resource
             query = self.__discoverer.find_application_resource(self.__info, resource)
 
