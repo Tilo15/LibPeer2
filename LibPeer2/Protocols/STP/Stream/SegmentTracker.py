@@ -17,3 +17,6 @@ class SegmentTracker:
 
         if(len(self.remaining) == 0):
             self.notify_subject.on_completed()
+
+    def fail(self, exception):
+        self.notify_subject.on_error(exception)

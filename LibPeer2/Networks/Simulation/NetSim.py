@@ -3,6 +3,9 @@ from LibPeer2.Networks.Simulation.NetSimPeerInfo import NetSimPeerInfo
 from LibPeer2.Networks.Receiption import Receiption
 from LibPeer2.Networks.Advertisement import Advertisement
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
+from LibPeer2.Debug import Log
+
+from io import BytesIO
 
 import threading
 import queue
@@ -39,7 +42,8 @@ class NetSim(Network):
         self.conduit.advertise(self.identifier, advetrisement)
 
     def send(self, buffer, peer_info: NetSimPeerInfo):
-        threading.Thread(name="Packet latency timer", target=self.__send, args=(buffer, peer_info)).start()
+        data = buffer.read()
+        threading.Thread(name="Packet latency timer", target=self.__send, args=(BytesIO(data), peer_info)).start()
 
     def __send(self, buffer, peer_info: NetSimPeerInfo):
         time.sleep(self.latency)
@@ -63,8 +67,8 @@ class NetSim(Network):
                     self.incoming_receiption.on_next(receiption)
                 except Exception as e:
                     print(traceback.format_exc())
-                    print("Exception on incoming packet: {}".format(e))
+                    Log.error("Exception on incoming packet: {}".format(e))
 
             else:
-                print("NetSim dropped a packet ({} <= {})".format(ran_num, self.loss_probability * 100))
+                Log.info("NetSim dropped a packet ({} <= {})".format(ran_num, self.loss_probability * 100))
 

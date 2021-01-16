@@ -7,6 +7,7 @@ from LibPeer2.Protocols.STP.Stream.Segments.Acknowledgement import Acknowledgeme
 from LibPeer2.Protocols.STP.Stream.Segments.Control import Control
 from LibPeer2.Protocols.STP.Stream.SegmentTracker import SegmentTracker
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
+from LibPeer2.Debug import Log
 
 from threading import Lock
 from io import BytesIO
@@ -52,6 +53,7 @@ class Session:
         self.incoming_app_data = rx.subject.Subject()
 
         self.reply_subject = None
+        self.closed = rx.subject.Subject()
 
         if(ingress):
             close_subject = rx.subject.Subject()
@@ -84,7 +86,7 @@ class Session:
             if(segment.sequence_number not in self.in_flight):
                 # We must have resent redundantly
                 self.redundant_resends += 1
-                #print("REDUNDANT RESEND #{}".format(self.redundant_resends))
+                Log.debug("Redundant resend of segment")
                 return
 
             # We have an acknowledgement segment, remove payload segment from in-flight
@@ -147,9 +149,31 @@ class Session:
 
         elif(isinstance(segment, Control)):
             # We have a control segment, what is it telling us?
+            if(segment.command == Control.CMD_COMPLETE):
+                # Close the stream
+                self.__close_session("The remote peer completed the stream")
+
             if(segment.command == Control.CMD_ABORT):
-                pass
-            # TODO
+                # Close the stream
+                self.__close_session("The stream was aborted by the remote peer")
+
+
+    def __close_session(self, reason):
+        # Ignore if stream already closed
+        if(not self.open):
+            return
+
+        Log.debug("Stream closed: {}".format(reason))
+        self.open = False
+        
+        # Get all trackers tracking transmissions that have not completed
+        current_trackers = set(self.segment_trackers[x] for x in self.in_flight.keys())
+        
+        # Fail them all
+        for tracker in current_trackers:
+            tracker.fail(IOError("The stream was closed before all data was sent. Reason: {}".format(reason)))
+
+        self.closed.on_completed()
 
                             
     def __complete_reconstruction(self):
@@ -245,9 +269,6 @@ class Session:
             # Update the delta too
             self.adjustment_delta = 0
 
-        # TODO remove
-        #print("NEW WINDOW SIZE:\t{}\tDELTA:\t{}\tLAST TRIP:\t{}\tBEST PING:\t{}".format(self.window_size, self.adjustment_delta, last_trip, self.best_ping))
-
 
     def __enqueue_segments(self):
         # If we have segments to queue, and room in our window, queue them
@@ -263,13 +284,17 @@ class Session:
         for segment in list(self.in_flight.values()):
             # Is the segment timing value less than the max time?
             if(segment.sequence_number in self.in_flight and segment.timing != None and segment.timing < maxtime):
-                #print("RESEND: {}".format(self.worst_ping * (self.redundant_resends + 1) * self.window_size))
                 # Resend it
                 segment.timing = time.time()
                 self.outgoing_segment_queue.put(segment)
 
 
     def __handle_app_data(self, stream):
+        # Is the stream open?
+        if(not self.open):
+            # No, error
+            raise IOError("Cannot send data: The stream is closed")
+
         # Create a send notify subject
         subject = rx.subject.Subject()
 
@@ -298,8 +323,9 @@ class Session:
 
 
     def __handle_app_close(self):
-        return
-        raise NotImplementedError()
+        self.outgoing_segment_queue = queue.Queue()
+        self.outgoing_segment_queue.put(Control(Control.CMD_COMPLETE))
+        self.__close_session("Stream closed by local application")
 
 
     def __create_payload_segments(self, stream):

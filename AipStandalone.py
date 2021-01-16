@@ -19,7 +19,7 @@ class AipStandalone:
             AIP.CAPABILITY_FIND_PEERS
         ))
 
-        self.aip = AIP.AIP(self.muxer, features)
+        self.aip = AIP.AIP(self.muxer, capabilities = features)
 
         self.network = IPv4("0.0.0.0", port)
         self.network.bring_up()

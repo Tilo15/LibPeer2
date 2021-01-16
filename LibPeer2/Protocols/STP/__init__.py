@@ -13,6 +13,7 @@ from LibPeer2.Protocols.STP.Stream.Session import Session
 from LibPeer2.Protocols.STP.Stream.EgressStream import EgressStream
 from LibPeer2.Protocols.STP.Stream.IngressStream import IngressStream
 from LibPeer2.Protocols.STP.Repeater import Repeater
+from LibPeer2.Debug import Log
 
 from cachetools import TTLCache
 from io import BytesIO
@@ -23,6 +24,7 @@ import uuid
 import rx
 import threading
 import queue
+import traceback
 
 
 """Stream Transmission Protocol"""
@@ -90,7 +92,11 @@ class STP:
 
     def __notify(self):
         while True:
-            self.__notification_queue.get()()
+            try:
+                self.__notification_queue.get()()
+            except Exception as e:
+                print(traceback.format_exc())
+                Log.error("Exception executing task in STP notification queue: {}".format(e))
 
 
 
@@ -210,6 +216,7 @@ class STP:
         elif(isinstance(message, SegmentMessage)):
             # Do we have a session open?
             if(message.session_id not in self.__open_sessions):
+                Log.debug("Received segment for non-open session")
                 # Skip
                 return
 
@@ -253,6 +260,11 @@ class STP:
             else:
                 # Otherwise notify the application normally
                 self.__notification_queue.put(lambda: self.incoming_stream.on_next(session.stream))
+
+
+    def __cleanup_session(self, session: Session):
+        # Remove from open sessions
+        del self.__open_sessions[session.identifier]
 
                 
 

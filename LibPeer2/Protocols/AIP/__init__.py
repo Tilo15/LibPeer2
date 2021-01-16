@@ -11,6 +11,7 @@ from LibPeer2.Protocols.AIP.InstanceInformation import InstanceInformation
 from LibPeer2.Networks import Network
 from LibPeer2.Networks.PeerInfo import PeerInfo
 from LibPeer2.Networks.Advertisement import Advertisement
+from LibPeer2.Debug import Log
 
 from typing import Dict
 from typing import Set
@@ -44,11 +45,13 @@ MAX_QUERY_HOPS = 16
 class AIP:
     
 
-    def __init__(self, muxer: MX2, capabilities = set((CAPABILITY_ADDRESS_INFO, CAPABILITY_FIND_PEERS, CAPABILITY_QUERY_ANSWER))):
+    def __init__(self, muxer: MX2, *, capabilities = set((CAPABILITY_ADDRESS_INFO, CAPABILITY_FIND_PEERS, CAPABILITY_QUERY_ANSWER)), join_all = False):
 
         self.__application_information: List[ApplicationInformation] = []
 
         self.__capabilities = capabilities
+
+        self.__join_all_groups = join_all
 
         self.__muxer = muxer
         self.__instance = muxer.create_instance("AIP")
@@ -68,6 +71,7 @@ class AIP:
         self.__query_response_count = TTLCache(65536, 120)
         self.__handled_query_ids: Set[bytes] = set()
         self.__peer_info: Set[PeerInfo] = set()
+        self.__new_peer_info = rx.subject.Subject()
 
         self.__new_group_peer: Dict[bytes, rx.subject.Subject] = {}
         self.__ready = False
@@ -153,7 +157,7 @@ class AIP:
             stream.close()
 
         # Loop over each instance in the query group
-        for instance in group.instances:
+        for instance in group.instances.copy():
             # Is this instance reachable?
             if(instance in self.__reachable_peers):
                 # Open a stream with the instance
@@ -195,29 +199,48 @@ class AIP:
         self.__query_groups[group] = QueryGroup()
         self.__new_group_peer[group] = rx.subject.Subject()
 
-        # Construct a query asking for peers in the group
-        query = Query(QUERY_GROUP + group)
+        # Create function to send quesy
+        def send_group_query():
+            # Construct a query asking for peers in the group
+            query = Query(QUERY_GROUP + group)
 
-        # Create handler for query answers
-        def on_query_answer(answer: InstanceInformation):
-            # Create a subject so we know when this peer has been greeted
-            self.__on_peer_greet[answer.instance_reference] = rx.subject.Subject()
+            Log.debug("Joining group '{}'".format(group.decode("utf-8")))
 
-            # When is has been greeted, notify the group subject
-            self.__on_peer_greet[answer.instance_reference].subscribe(self.__new_group_peer[group].on_next)
+            # Create handler for query answers
+            def on_query_answer(answer: InstanceInformation):
+                Log.debug("Found AIP peer in group '{}'".format(group.decode("utf-8")))
 
-            # Inquire
-            self.__muxer.inquire(self.__instance, answer.instance_reference, answer.connection_methods)
+                # Create a subject so we know when this peer has been greeted
+                self.__on_peer_greet[answer.instance_reference] = rx.subject.Subject()
 
-            # Add to group
-            self.__query_groups[group].add_peer(answer.instance_reference)
+                # Add to group
+                self.__query_groups[group].add_peer(answer.instance_reference)
 
-        # Subscribe to the answer
-        query.answer.subscribe(on_query_answer)
+                # Are we already connected to this peer?
+                if(answer.instance_reference in self.__reachable_peers):
+                    # No need to greet, already connected
+                    self.__new_group_peer[group].on_next(answer.instance_reference)
+                    return
 
-        # Send the query
-        self.__initiate_query(query, self.__default_group)
+                # When is has been greeted, notify the group subject
+                self.__on_peer_greet[answer.instance_reference].subscribe(self.__new_group_peer[group].on_next)
 
+                # Inquire
+                self.__muxer.inquire(self.__instance, answer.instance_reference, answer.connection_methods)
+
+            # Subscribe to the answer
+            query.answer.subscribe(on_query_answer)
+
+            # Send the query
+            self.__initiate_query(query, self.__default_group)
+
+        # Are we ready?
+        if(self.__ready):
+            # Yes, Send the query
+            send_group_query()
+        else:
+            # No, do it when we are ready
+            self.ready.subscribe(on_completed=send_group_query)
 
     def __rx_advertisement(self, advertisement: Advertisement):
         # Send an inquiry
@@ -269,6 +292,7 @@ class AIP:
     def __rx_address(self, info: PeerInfo):
         # We received peer info, add to our set
         self.__peer_info.add(info)
+        self.__new_peer_info.on_next(info)
 
 
     def __rx_peers(self, peers: List[InstanceInformation]):
@@ -312,7 +336,6 @@ class AIP:
             info = InstanceInformation.deserialise(answer.data)
 
             # Notify the query's subject listeners
-            #print("Received answer for query {}.".format(query))
             query.answer.on_next(info)
 
             # Complete!
@@ -320,7 +343,6 @@ class AIP:
 
         # Does this have somwhere to forward to?
         if(len(answer.path) > 0):
-            #print("Forwarded answer")
             # Put it back on its path
             self.__send_answer(answer)
 
@@ -353,20 +375,40 @@ class AIP:
             # Get the group identifier
             group = query.data[1:]
 
+            Log.debug("Received group query for group '{}'".format(group.decode("utf-8")))
+
+            # Are we not in this group, but joining all?
+            if(self.__join_all_groups) and (group not in self.__query_groups):
+                Log.debug("Automatically joining new group")
+                # Join group
+                self.__join_query_group(group)
+
             # Are we in this group?
             if(group in self.__query_groups):
-                # Yes, create some instance information
-                instance = InstanceInformation(self.__instance.reference, self.__peer_info)
+                # Yes create a function for sending the answer
+                def send_reply(isDefered = True):
+                    # Create some instance information
+                    instance = InstanceInformation(self.__instance.reference, self.__peer_info)
 
-                #print("I'm in that group")
+                    # Send the instance information in the answer
+                    answer = Answer(instance.serialise(), query.return_path.copy(), query.identifier)
 
-                # Send the instance information in the answer
-                answer = Answer(instance.serialise(), query.return_path.copy(), query.identifier)
+                    # Send the answer
+                    self.__send_answer(answer)
 
-                # Send the answer
-                self.__send_answer(answer)
+                    if(isDefered):
+                        Log.debug("Sent defered group reply")
+                
+                # Do we have peer info to send yet?
+                if(len(self.__peer_info) > 0):
+                    # Yes, do it
+                    Log.debug("Responding to query for group '{}'".format(group.decode("utf-8")))
+                    send_reply(False)
 
-            #print("Forwarded group query")
+                else:
+                    # No, wait for peer info
+                    self.__new_peer_info.pipe(rx.operators.take(1)).subscribe(on_completed=send_reply)
+                    Log.debug("Responding to query for group '{}' but defering response until we have peer info to send".format(group.decode("utf-8")))
 
             # This is a query for a group, forward on to default group
             self.__send_query(query, self.__default_group)
@@ -375,6 +417,7 @@ class AIP:
         elif(query_type == QUERY_APPLICATION):
             # Get the application namespace
             namespace = query.data[1:]
+            Log.debug("Received application query for '{}'".format(namespace.decode("utf-8")))
 
             # Are we in the group for this namespace?
             if(namespace in self.__query_groups):
@@ -385,12 +428,9 @@ class AIP:
                         # Yes, create instance information
                         instance = InstanceInformation(app.instance, self.__peer_info)
 
-                        #print("I'm running that application!")
-
                         # Send the instance information in the answer
                         self.__send_answer(Answer(instance.serialise(), query.return_path.copy(), query.identifier))
 
-                #print("Forwarded application query")
                 # Forward on to the group
                 self.__send_query(query, self.__query_groups[namespace])
 
@@ -402,6 +442,8 @@ class AIP:
             # Read the application namespace
             namespace = query.data[33:]
 
+            Log.debug("Received application resource query for application '{}'".format(namespace.decode("utf-8")))
+
             # Are we in the group for this namespace?
             if(namespace in self.__query_groups):
                 # Yes, find relevent ApplicationInformation
@@ -411,13 +453,12 @@ class AIP:
                         # Yes, create instance information
                         instance = InstanceInformation(app.instance, self.__peer_info)
 
-                        #print("I have that resource!")
+                        Log.debug("Responded to peer requesting resource associated with this peer")
 
                         # Send the instance information in the answer
                         self.__send_answer(Answer(instance.serialise(), query.return_path.copy(), query.identifier))
 
                 # Forward on to the group
-                #print("Forwarded resource query")
                 self.__send_query(query, self.__query_groups[namespace])
 
 
@@ -434,19 +475,22 @@ class AIP:
         # Handler to reply to the request
         def handle_stream(es: EgressStream):
             if(request_type == REQUEST_CAPABILITIES):
+                Log.debug("Received capabilities request")
                 capabilities = struct.pack("!B", len(self.__capabilities))
                 capabilities += b"".join(self.__capabilities)
                 es.write(capabilities)
                 es.close()
 
             elif(request_type == REQUEST_ADDRESS):
+                Log.debug("Received address request")
                 address = self.__muxer.get_peer_info(es.target)
                 es.write(address.serialise())
                 es.close()
 
             elif(request_type == REQUEST_PEERS):
+                Log.debug("Received peers request")
                 # Select up to 5 peers to reply with
-                peers = [x for x in random.sample(self.__default_group.instances, min(5, len(self.__reachable_peers))) if x in self.__peer_connection_methods]
+                peers = [] #[x for x in random.sample(self.__default_group.instances, min(5, len(self.__reachable_peers))) if x in self.__peer_connection_methods]
 
                 # Send the count
                 es.write(struct.pack("!B", len(peers)))

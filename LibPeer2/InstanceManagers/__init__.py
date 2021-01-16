@@ -6,10 +6,11 @@ import rx.subject
 
 class InstanceManager:
     
-    def __init__(self, application_namespace: str):
+    def __init__(self, application_namespace: str, use_repeaters = True, networks = []):
         self.namespace = application_namespace
         self.new_peer = rx.subject.Subject()
         self.new_stream = rx.subject.Subject()
+        self.use_repeaters = use_repeaters
 
     def establish_stream(self, peer: InstanceReference, *, in_reply_to = None) -> rx.subject.Subject:
         raise NotImplementedError()

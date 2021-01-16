@@ -5,6 +5,7 @@ from LibPeer2.Protocols.AIP import AIP
 from LibPeer2.Protocols.AIP.ApplicationInformation import ApplicationInformation
 from LibPeer2.Protocols.AIP.InstanceInformation import InstanceInformation
 from LibPeer2.Protocols.STP import STP
+from LibPeer2.Protocols.RPP import RPP
 from LibPeer2.Networks.IPv4 import IPv4
 
 
@@ -12,41 +13,56 @@ from typing import Set
 from typing import Dict
 from rx.subject import ReplaySubject
 from rx.subject import Subject
+from rx.operators import take
 
 
 class DefaultInstanceManager(InstanceManager):
 
-    def __init__(self, namespace: str):
+    def __init__(self, namespace: str, use_repeaters = True, networks = []):
         super().__init__(namespace)
 
+        self.__networks = networks
         self.__reachable_peers: Set[InstanceReference] = set()
         self.__resource_subjects: Dict[bytes, ReplaySubject] = {}
         self.__peer_subjects: Dict[InstanceReference, ReplaySubject] = {}
+        self.__has_aip_group_peers = ReplaySubject()
 
-        port = 5156
-        while True:
-            try:
-                self.__network = IPv4("0.0.0.0", port)
-                self.__network.bring_up()
-                break
-            except Exception as e:
-                if(port >= 9000):
-                    raise e
+        if(len(networks) == 0):
+            port = 5156
+            while True:
+                try:
+                    network = IPv4("0.0.0.0", port)
+                    self.__networks.append(network)
+                    break
+                except Exception as e:
+                    if(port >= 9000):
+                        raise e
 
-                port += 1
+                    port += 1
 
         self.__muxer = MX2()
-        self.__muxer.register_network(self.__network)
+
+        for network in self.__networks:
+            network.bring_up()
+            self.__muxer.register_network(network)
+
         self.__discoverer = AIP(self.__muxer)
         self.__instance = self.__muxer.create_instance(self.namespace)
         self.__transport = STP(self.__muxer, self.__instance)
+        self.__path_finder = RPP(self.__muxer, self.__discoverer)
 
-        self.__discoverer.ready.subscribe(self.__aip_ready)
+        self.__path_finder.add_instance(self.__instance.reference)
+
         self.__instance.incoming_greeting.subscribe(self.__received_greeting)
         self.__transport.incoming_stream.subscribe(self.__new_stream)
 
-        self.__discoverer.add_network(self.__network)
+        for network in self.__networks:
+            self.__discoverer.add_network(network)
+
         self.__info = ApplicationInformation.from_instance(self.__instance)
+        
+        # Add the application to the discoverer
+        self.__discoverer.add_application(self.__info).subscribe(self.__new_aip_app_peer)
 
 
     def establish_stream(self, peer: InstanceReference, *, in_reply_to = None) -> Subject:
@@ -63,11 +79,16 @@ class DefaultInstanceManager(InstanceManager):
             # Create one
             self.__resource_subjects[resource] = ReplaySubject()
 
-        # Create a query for the resource
-        query = self.__discoverer.find_application_resource(self.__info, resource)
+        # Prepeare function to make the resource request
+        def find_peers(has_group_peers):
+            # Create a query for the resource
+            query = self.__discoverer.find_application_resource(self.__info, resource)
 
-        # Subscribe to the queries answer
-        query.answer.subscribe(lambda x: self.__found_resource_instance(x, resource))
+            # Subscribe to the queries answer
+            query.answer.subscribe(lambda x: self.__found_resource_instance(x, resource))
+
+        # When we are in a position to ask group peers, do it
+        self.__has_aip_group_peers.pipe(take(1)).subscribe(find_peers)
 
         # Return the resource subject
         return self.__resource_subjects[resource]
@@ -77,15 +98,13 @@ class DefaultInstanceManager(InstanceManager):
     def resources(self) -> Set[bytes]:
         return self.__info.resources
 
-
-    def __aip_ready(self, state):
-        # Add the application to the discoverer
-        self.__discoverer.add_application(self.__info).subscribe(self.__new_aip_app_peer)
-
     
     def __new_aip_app_peer(self, instance):
         # Query for application instances
         self.__discoverer.find_application_instance(self.__info).subscribe(self.__found_instance)
+
+        # We now have an AIP group peer
+        self.__has_aip_group_peers.on_next(True)
 
     
     def __found_instance(self, instance_info: InstanceInformation):
@@ -95,7 +114,10 @@ class DefaultInstanceManager(InstanceManager):
             return
 
         # Inquire about the peer
-        self.__muxer.inquire(self.__instance, instance_info.instance_reference, instance_info.connection_methods)
+        subject = self.__muxer.inquire(self.__instance, instance_info.instance_reference, instance_info.connection_methods)
+
+        # Handle timeouts
+        subject.subscribe(on_error=lambda x: self.__greeting_timeout(instance_info.instance_reference))
 
 
     def __found_resource_instance(self, instance_info: InstanceInformation, resource: bytes):
@@ -144,3 +166,23 @@ class DefaultInstanceManager(InstanceManager):
         subject = ReplaySubject()
         self.__peer_subjects[ref] = subject
         return subject
+
+    
+    def __greeting_timeout(self, target: InstanceReference):
+        # Have we already found this peer?
+        if(target in self.__instance.reachable_peers or not self.use_repeaters):
+            return
+
+        # Did not receive greeting from instance, ask for paths via repeaters
+        query = self.__path_finder.find_path(target)
+
+        def handle_route(paths):
+            # Have we already found this peer?
+            if(target in self.__instance.reachable_peers):
+                return
+
+            # We have a path, inquire
+            self.__muxer.inquire_via_paths(self.__instance, target, paths)
+
+        # Subscribe to answers
+        query.subscribe(handle_route)

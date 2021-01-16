@@ -3,6 +3,7 @@ from LibPeer2.Networks.Receiption import Receiption
 from LibPeer2.Networks.Advertisement import Advertisement
 from LibPeer2.Networks.IPv4.IPv4PeerInfo import IPv4PeerInfo
 from LibPeer2.Protocols.MX2.InstanceReference import InstanceReference
+from LibPeer2.Debug import Log
 
 from io import BytesIO
 from dns import resolver
@@ -122,7 +123,7 @@ class IPv4(Network):
                     self.incoming_advertisment.on_next(advertisement)
 
             except Exception as e:
-                print("Exception on incoming packet: {}".format(e))
+                Log.error("Exception on incoming packet: {}".format(e))
 
 
     def __mcast_listen(self):
@@ -176,7 +177,7 @@ class IPv4(Network):
 
                         if(data[0] == b"P2M"):
                             # Seed message
-                            print("DNS Seed: {}".format(data[1].decode('utf-8')))
+                            Log.msg("DNS Seed: {}".format(data[1].decode('utf-8')))
 
                         elif(data[0] == b"P2D" or data[0] == b"P2A"):
                             # Domain pointer or IP Address
@@ -185,7 +186,7 @@ class IPv4(Network):
             except:
                 pass
 
-        print("DNS Seed Search Complete")
+        Log.debug("DNS Seed Search Complete")
 
 
     def __handle_dns_discovery(self, host, port):
